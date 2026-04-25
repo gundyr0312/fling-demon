@@ -1,27 +1,21 @@
--- // WALKFLING V5 (HYBRID OVERKILL)
+-- // DISCONNECT-FLING (Hacker Kicker)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
-local function startWalkFling(char)
+local function startCrashFling(char)
     local Root = char:WaitForChild("HumanoidRootPart")
     local Humanoid = char:WaitForChild("Humanoid")
-    local walkflinging = true
     
-    -- CONFIGURACIÓN DE PODER
-    local FlingForce = 9999999 -- El poder que querías
+    -- FUERZA DE CRASH (Límite matemático de precisión simple)
+    local CrashForce = 1e38 -- Este número es casi el máximo permitido por el motor físico
     
-    -- Inmunidad básica
     Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
     Humanoid.BreakJointsOnDeath = false
 
-    -- FIX DE MOVIMIENTO: Desactivamos el "anclaje" del humanoide
-    Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-
-    -- Bucle de Red y Simulación
+    -- Optimización de Red para que el servidor crea TUS datos de colisión
     task.spawn(function()
-        while walkflinging do
+        while true do
             pcall(function()
                 settings().Physics.AllowSleep = false
                 LocalPlayer.SimulationRadius = 1e10
@@ -31,47 +25,36 @@ local function startWalkFling(char)
         end
     end)
 
-    -- EL MOTOR HÍBRIDO (No te deja pegado)
     task.spawn(function()
-        while walkflinging and Root and Root.Parent do
-            -- FRAME 1: Empuje Masivo (Aquí ocurre el Fling)
+        while char.Parent and Root do
             RunService.Heartbeat:Wait()
-            local currentVel = Root.Velocity
-            Root.Velocity = currentVel * FlingForce + Vector3.new(0, FlingForce, 0)
             
-            -- FRAME 2: Liberación (Aquí es donde puedes caminar)
+            -- Guardamos la velocidad real para movernos
+            local moveVel = Root.Velocity
+            
+            -- FRAME DE IMPACTO: Aplicamos fuerza de "corrupción de posición"
+            -- Multiplicamos por la dirección en la que te mueves para enfocar el golpe
+            Root.Velocity = Root.CFrame.LookVector * CrashForce + Vector3.new(0, CrashForce, 0)
+            
             RunService.RenderStepped:Wait()
-            Root.Velocity = currentVel -- Volvemos a tu velocidad normal de caminado
+            -- FRAME DE RECUPERACIÓN: Devolvemos control para no desconectarnos nosotros
+            Root.Velocity = moveVel
             
-            -- FRAME 3: Estabilización
-            RunService.Stepped:Wait()
-            if Humanoid:GetState() ~= Enum.HumanoidStateType.Running then
-                -- Forzamos al humanoide a que crea que está corriendo para que el joystick funcione
-                Humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
-            end
+            -- Bloqueamos el estado para no tropezar
+            Humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
         end
     end)
 
-    -- COLISIONES INTELIGENTES
+    -- Sin fricción y sin colisión interna
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
-            -- Quitamos fricción de las partes pequeñas para que no "raspen" el suelo
-            if part ~= Root then
-                part.CanCollide = false
-            end
+            part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+            if part ~= Root then part.CanCollide = false end
         end
     end
-    
-    -- El Root debe tocar el suelo pero sin fricción para no quedarse pegado
-    Root.CanCollide = true
-    local mat = Instance.new("CustomPhysicsProperties", Root)
-    Root.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0) -- Fricción cero
 end
 
-if LocalPlayer.Character then
-    startWalkFling(LocalPlayer.Character)
-end
+if LocalPlayer.Character then startCrashFling(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(startCrashFling)
 
-LocalPlayer.CharacterAdded:Connect(startWalkFling)
-
-print("🔥 V5 HÍBRIDA: Fling potente + Caminado libre activo.")
+print("⚡ CRASH-FLING ACTIVO: Tocar a alguien puede causar su desconexión.")
