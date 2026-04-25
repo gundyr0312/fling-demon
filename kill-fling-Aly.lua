@@ -1,4 +1,4 @@
--- // WALKFLING V4 (MOVIMIENTO LIBRE + EMPUJE EXPLOSIVO)
+-- // WALKFLING V5 (HYBRID OVERKILL)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -6,56 +6,66 @@ local LocalPlayer = Players.LocalPlayer
 local function startWalkFling(char)
     local Root = char:WaitForChild("HumanoidRootPart")
     local Humanoid = char:WaitForChild("Humanoid")
+    local walkflinging = true
     
-    -- Limpiar basurilla de intentos anteriores
-    for _, v in pairs(Root:GetChildren()) do
-        if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") then
-            v:Destroy()
-        end
-    end
-
-    -- MOTOR DE FUERZA (Esto es lo que empuja, pero permite caminar)
-    local VelocityForce = Instance.new("BodyVelocity")
-    VelocityForce.Name = "FlingForce"
-    VelocityForce.Parent = Root
-    VelocityForce.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-    VelocityForce.Velocity = Vector3.new(9e9, 9e9, 9e9) -- El poder absurdo
-
-    -- CONFIGURACIÓN DE ESTADO
+    -- CONFIGURACIÓN DE PODER
+    local FlingForce = 9999999 -- El poder que querías
+    
+    -- Inmunidad básica
     Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-    
-    local connection
-    connection = RunService.Heartbeat:Connect(function()
-        if not char.Parent then connection:Disconnect() return end
-        
-        -- ESTO ES CLAVE: Alternamos la fuerza para que el motor te deje moverte
-        -- En un frame eres un proyectil, en el otro eres un jugador normal
-        if VelocityForce.Parent == Root then
-            VelocityForce.Velocity = Vector3.new(9e9, 9e9, 9e9)
-            -- Pequeño truco de red
-            settings().Physics.AllowSleep = false
-            LocalPlayer.SimulationRadius = 1e10
-        end
-        
-        -- Evitamos que el humanoide se caiga o se quede trabado
-        if Humanoid:GetState() ~= Enum.HumanoidStateType.Physics then
-            Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+    Humanoid.BreakJointsOnDeath = false
+
+    -- FIX DE MOVIMIENTO: Desactivamos el "anclaje" del humanoide
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+
+    -- Bucle de Red y Simulación
+    task.spawn(function()
+        while walkflinging do
+            pcall(function()
+                settings().Physics.AllowSleep = false
+                LocalPlayer.SimulationRadius = 1e10
+                LocalPlayer.MaxSimulationRadius = 1e10
+            end)
+            task.wait(0.1)
         end
     end)
 
-    -- AJUSTE DE COLISIONES (Sin esto te pegas al suelo)
-    for _, part in pairs(char:GetChildren()) do
+    -- EL MOTOR HÍBRIDO (No te deja pegado)
+    task.spawn(function()
+        while walkflinging and Root and Root.Parent do
+            -- FRAME 1: Empuje Masivo (Aquí ocurre el Fling)
+            RunService.Heartbeat:Wait()
+            local currentVel = Root.Velocity
+            Root.Velocity = currentVel * FlingForce + Vector3.new(0, FlingForce, 0)
+            
+            -- FRAME 2: Liberación (Aquí es donde puedes caminar)
+            RunService.RenderStepped:Wait()
+            Root.Velocity = currentVel -- Volvemos a tu velocidad normal de caminado
+            
+            -- FRAME 3: Estabilización
+            RunService.Stepped:Wait()
+            if Humanoid:GetState() ~= Enum.HumanoidStateType.Running then
+                -- Forzamos al humanoide a que crea que está corriendo para que el joystick funcione
+                Humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+            end
+        end
+    end)
+
+    -- COLISIONES INTELIGENTES
+    for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
-            -- Solo el RootPart debe tener colisión para que puedas pisar el suelo
-            -- Las demás partes deben ser "fantasmas" para no chocar contigo mismo
-            if part.Name ~= "HumanoidRootPart" then
+            -- Quitamos fricción de las partes pequeñas para que no "raspen" el suelo
+            if part ~= Root then
                 part.CanCollide = false
             end
         end
     end
     
+    -- El Root debe tocar el suelo pero sin fricción para no quedarse pegado
     Root.CanCollide = true
-    print("✅ V4 CARGADA: Si no puedes moverte, salta una vez.")
+    local mat = Instance.new("CustomPhysicsProperties", Root)
+    Root.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0) -- Fricción cero
 end
 
 if LocalPlayer.Character then
@@ -63,3 +73,5 @@ if LocalPlayer.Character then
 end
 
 LocalPlayer.CharacterAdded:Connect(startWalkFling)
+
+print("🔥 V5 HÍBRIDA: Fling potente + Caminado libre activo.")
