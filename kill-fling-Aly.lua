@@ -1,60 +1,70 @@
--- // DISCONNECT-FLING (Hacker Kicker)
+-- // EXECUTIONER-FLING V7 (Ghost Hitbox Edition)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
-local function startCrashFling(char)
+local function startExecutioner(char)
     local Root = char:WaitForChild("HumanoidRootPart")
     local Humanoid = char:WaitForChild("Humanoid")
     
-    -- FUERZA DE CRASH (Límite matemático de precisión simple)
-    local CrashForce = 1e38 -- Este número es casi el máximo permitido por el motor físico
+    -- FUERZA LETAL (Masiva pero en un objeto externo)
+    local KillForce = 1e25 
     
-    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-    Humanoid.BreakJointsOnDeath = false
+    -- 1. Creamos el "Hitbox Fantasma"
+    local GhostPart = Instance.new("Part")
+    GhostPart.Name = "Executioner_Hitbox"
+    GhostPart.Size = Vector3.new(5, 5, 5) -- Tamaño del área de golpe
+    GhostPart.Transparency = 0.8 -- Casi invisible (puedes poner 1)
+    GhostPart.Color = Color3.fromRGB(255, 0, 0)
+    GhostPart.CanCollide = false
+    GhostPart.Massless = true
+    GhostPart.Parent = char
 
-    -- Optimización de Red para que el servidor crea TUS datos de colisión
-    task.spawn(function()
-        while true do
-            pcall(function()
-                settings().Physics.AllowSleep = false
-                LocalPlayer.SimulationRadius = 1e10
-                LocalPlayer.MaxSimulationRadius = 1e10
-            end)
-            task.wait(0.1)
+    -- 2. Le aplicamos la fuerza infinita al objeto fantasma
+    local Velocity = Instance.new("BodyVelocity")
+    Velocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    Velocity.Velocity = Vector3.new(KillForce, KillForce, KillForce)
+    Velocity.Parent = GhostPart
+
+    -- 3. Motor de Teletransporte y Simulación
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        if not char.Parent or not GhostPart.Parent then 
+            connection:Disconnect() 
+            return 
         end
+        
+        -- El objeto fantasma siempre estará un poco delante de ti
+        GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -3)
+        GhostPart.Velocity = Vector3.new(KillForce, KillForce, KillForce)
+
+        -- Robamos la física del área
+        pcall(function()
+            settings().Physics.AllowSleep = false
+            LocalPlayer.SimulationRadius = 1e10
+            LocalPlayer.MaxSimulationRadius = 1e10
+        end)
     end)
 
-    task.spawn(function()
-        while char.Parent and Root do
-            RunService.Heartbeat:Wait()
-            
-            -- Guardamos la velocidad real para movernos
-            local moveVel = Root.Velocity
-            
-            -- FRAME DE IMPACTO: Aplicamos fuerza de "corrupción de posición"
-            -- Multiplicamos por la dirección en la que te mueves para enfocar el golpe
-            Root.Velocity = Root.CFrame.LookVector * CrashForce + Vector3.new(0, CrashForce, 0)
-            
-            RunService.RenderStepped:Wait()
-            -- FRAME DE RECUPERACIÓN: Devolvemos control para no desconectarnos nosotros
-            Root.Velocity = moveVel
-            
-            -- Bloqueamos el estado para no tropezar
-            Humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
-        end
-    end)
-
-    -- Sin fricción y sin colisión interna
+    -- 4. Protección para ti (Sin colisiones internas)
     for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-            if part ~= Root then part.CanCollide = false end
+        if part:IsA("BasePart") and part ~= Root then
+            part.CanCollide = false
         end
     end
+    
+    -- Seguridad: Si el fantasma se separa demasiado, lo regresa
+    task.spawn(function()
+        while char.Parent do
+            if (GhostPart.Position - Root.Position).Magnitude > 10 then
+                GhostPart.CFrame = Root.CFrame
+            end
+            task.wait()
+        end
+    end)
 end
 
-if LocalPlayer.Character then startCrashFling(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(startCrashFling)
+if LocalPlayer.Character then startExecutioner(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(startExecutioner)
 
-print("⚡ CRASH-FLING ACTIVO: Tocar a alguien puede causar su desconexión.")
+print("💀 EXECUTIONER V7: El escudo rojo frente a ti desintegrará a quien toque.")
