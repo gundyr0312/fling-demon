@@ -1,4 +1,4 @@
--- // WALKFLING OVERKILL V3 (MOVIMIENTO FLUIDO)
+-- // WALKFLING V4 (MOVIMIENTO LIBRE + EMPUJE EXPLOSIVO)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -6,63 +6,56 @@ local LocalPlayer = Players.LocalPlayer
 local function startWalkFling(char)
     local Root = char:WaitForChild("HumanoidRootPart")
     local Humanoid = char:WaitForChild("Humanoid")
-    local walkflinging = true
     
-    local FlingForce = 9999999 
-    
-    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-    Humanoid.BreakJointsOnDeath = false
-    
-    -- Limpiar fuerzas previas para evitar que se quede pegado
+    -- Limpiar basurilla de intentos anteriores
     for _, v in pairs(Root:GetChildren()) do
-        if v:IsA("BodyVelocity") or v.Name == "FlingFix" then v:Destroy() end
+        if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") then
+            v:Destroy()
+        end
     end
 
-    -- Fuerza de flotación mínima para que no se pegue al suelo
-    local float = Instance.new("BodyVelocity")
-    float.Name = "FlingFix"
-    float.Velocity = Vector3.new(0, 0, 0)
-    float.MaxForce = Vector3.new(0, 5000, 0) -- Solo ayuda a no hundirse
-    float.Parent = Root
+    -- MOTOR DE FUERZA (Esto es lo que empuja, pero permite caminar)
+    local VelocityForce = Instance.new("BodyVelocity")
+    VelocityForce.Name = "FlingForce"
+    VelocityForce.Parent = Root
+    VelocityForce.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    VelocityForce.Velocity = Vector3.new(9e9, 9e9, 9e9) -- El poder absurdo
 
-    local hbConnection
-    hbConnection = RunService.Stepped:Connect(function()
-        if not char.Parent then hbConnection:Disconnect() return end
+    -- CONFIGURACIÓN DE ESTADO
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        if not char.Parent then connection:Disconnect() return end
         
-        -- Mantenemos salud y quitamos fricción
-        Humanoid.Health = math.huge
-        pcall(function()
+        -- ESTO ES CLAVE: Alternamos la fuerza para que el motor te deje moverte
+        -- En un frame eres un proyectil, en el otro eres un jugador normal
+        if VelocityForce.Parent == Root then
+            VelocityForce.Velocity = Vector3.new(9e9, 9e9, 9e9)
+            -- Pequeño truco de red
             settings().Physics.AllowSleep = false
             LocalPlayer.SimulationRadius = 1e10
-            -- Cambiamos a un estado que permite movimiento pero mantiene física
-            Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-        end)
-    end)
-
-    task.spawn(function()
-        while walkflinging and Root and Root.Parent do
-            RunService.Heartbeat:Wait()
-            
-            local oldVel = Root.Velocity
-            -- El truco es no afectar el eje Y de forma constante, solo en el pico
-            Root.Velocity = oldVel * FlingForce + Vector3.new(0, FlingForce, 0)
-            
-            RunService.RenderStepped:Wait()
-            Root.Velocity = oldVel
-            
-            RunService.Stepped:Wait()
-            -- Esta pequeña fuerza evita que el RootPart se ancle al suelo
-            Root.Velocity = oldVel + Vector3.new(0, 0.5, 0)
+        end
+        
+        -- Evitamos que el humanoide se caiga o se quede trabado
+        if Humanoid:GetState() ~= Enum.HumanoidStateType.Physics then
+            Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
         end
     end)
 
-    -- Importante: Solo quitar colisión a partes que no sean el Root para poder caminar
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") and part ~= Root then
-            part.CanCollide = false
+    -- AJUSTE DE COLISIONES (Sin esto te pegas al suelo)
+    for _, part in pairs(char:GetChildren()) do
+        if part:IsA("BasePart") then
+            -- Solo el RootPart debe tener colisión para que puedas pisar el suelo
+            -- Las demás partes deben ser "fantasmas" para no chocar contigo mismo
+            if part.Name ~= "HumanoidRootPart" then
+                part.CanCollide = false
+            end
         end
     end
-    Root.CanCollide = true -- Mantenemos esto para que no atravieses el suelo
+    
+    Root.CanCollide = true
+    print("✅ V4 CARGADA: Si no puedes moverte, salta una vez.")
 end
 
 if LocalPlayer.Character then
@@ -70,5 +63,3 @@ if LocalPlayer.Character then
 end
 
 LocalPlayer.CharacterAdded:Connect(startWalkFling)
-
-print("🚀 V3 ACTIVA: Ya deberías poder caminar normal.")
