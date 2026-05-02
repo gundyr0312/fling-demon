@@ -1,4 +1,4 @@
--- // EXECUTIONER-FLING V9 (FIXED)
+-- // EXECUTIONER-FLING V10 (ANTI-SELF-FLING)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,27 +12,24 @@ local function startExecutioner()
     local Humanoid = char:WaitForChild("Humanoid")
     
     local IsActive = true
-    local PowerValue = 500 -- ajustable
+    local PowerValue = 800 -- fuerza
     
-    -- 🔥 HITBOX REAL (CON COLISIÓN)
+    -- 🔥 HITBOX
     local GhostPart = Instance.new("Part")
     GhostPart.Name = "Executioner_Hitbox"
-    GhostPart.Size = Vector3.new(8, 8, 8)
+    GhostPart.Size = Vector3.new(10, 10, 10)
     GhostPart.Transparency = 1
     GhostPart.CanCollide = true
-    GhostPart.Anchored = false
     GhostPart.Massless = false
     GhostPart.Parent = workspace
 
-    -- 🔗 SOLDAR AL PERSONAJE
+    -- 🔗 SOLDAR
     local Weld = Instance.new("WeldConstraint")
     Weld.Part0 = GhostPart
     Weld.Part1 = Root
     Weld.Parent = GhostPart
 
-    GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -3)
-
-    -- ⚙️ LOOP PRINCIPAL
+    -- ⚙️ LOOP
     local FlingConnection
     FlingConnection = RunService.Heartbeat:Connect(function()
         if not IsActive or Humanoid.Health <= 0 or not char.Parent then
@@ -43,18 +40,21 @@ local function startExecutioner()
             return
         end
         
-        -- Mantener hitbox enfrente
+        -- Posición delante tuyo
         GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -3)
 
-        -- 💥 FUERZA REAL (NUEVO MÉTODO)
-        GhostPart.AssemblyLinearVelocity = Root.CFrame.LookVector * PowerValue 
-            + Vector3.new(0, PowerValue, 0)
+        -- 💥 Empuje hacia adelante + arriba
+        GhostPart.AssemblyLinearVelocity =
+            Root.CFrame.LookVector * PowerValue + Vector3.new(0, PowerValue, 0)
+
+        -- 🧱 ANTI-FLING (CLAVE)
+        Root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        Root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
     end)
 
-    print("💀 EXECUTIONER ACTIVO (V9)")
+    print("💀 EXECUTIONER V10 ACTIVO (ESTABLE)")
 end
 
--- ▶ Ejecutar una sola vez
 if LocalPlayer.Character then
     startExecutioner()
 end
