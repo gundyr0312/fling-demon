@@ -5,42 +5,74 @@ local PhysicsService = game:GetService("PhysicsService")
 local Player = Players.LocalPlayer
 workspace.FallenPartsDestroyHeight = -50000
 
--- CollisionGroup para que el fling pegue mejor
 pcall(function()
-	PhysicsService:RegisterCollisionGroup("WalkFlingMe")
-	PhysicsService:RegisterCollisionGroup("WalkFlingOthers")
-	PhysicsService:CollisionGroupSetCollidable("WalkFlingMe", "WalkFlingOthers", false)
-	PhysicsService:CollisionGroupSetCollidable("WalkFlingMe", "Default", true)
+	PhysicsService:RegisterCollisionGroup("TouchFlingMe")
+	PhysicsService:RegisterCollisionGroup("TouchFlingOthers")
+	PhysicsService:CollisionGroupSetCollidable("TouchFlingMe", "TouchFlingOthers", false)
+	PhysicsService:CollisionGroupSetCollidable("TouchFlingMe", "Default", true)
 end)
 
-local WalkFlingConn = nil
-
-local function EnableWalkFling(HRP)
-	if WalkFlingConn then WalkFlingConn:Disconnect() end
-	WalkFlingConn = RunService.Heartbeat:Connect(function()
-		if not HRP or not HRP.Parent then return end
-		-- Solo rotación, no tocamos LinearVelocity para que no te frene
-		HRP.AssemblyAngularVelocity = Vector3.new(0, 9999999999, 0)
-	end)
-end
+local TouchConn = {}
 
 local function SetCollisionGroup(char)
 	for _, part in pairs(char:GetDescendants()) do
 		if part:IsA("BasePart") then
 			pcall(function()
-				part.CollisionGroup = "WalkFlingMe"
-				part.CanCollide = false -- no-collide ayuda al fling
-			end)
-		end
-	end
-	char.DescendantAdded:Connect(function(part)
-		if part:IsA("BasePart") then
-			pcall(function()
-				part.CollisionGroup = "WalkFlingMe"
+				part.CollisionGroup = "TouchFlingMe"
 				part.CanCollide = false
 			end)
 		end
+	end
+end
+
+local function FlingTarget(targetChar)
+	local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+	local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
+	if not targetHRP or not targetHum then return end
+	
+	-- Método 1: Velocidad brutal hacia abajo + adelante
+	pcall(function()
+		targetHRP.AssemblyLinearVelocity = Vector3.new(0, -9000, 0) + Player.Character.HumanoidRootPart.CFrame.LookVector * 5000
+		targetHRP.AssemblyAngularVelocity = Vector3.new(5000, 5000)
 	end)
+	
+	-- Método 2: CFrame directo al vacío si tiene noclip/god
+	-- Esto bypassea anti-fling porque no usa física
+	task.spawn(function()
+		for i = 1, 10 do
+			if not targetHRP or not targetHRP.Parent then break end
+			targetHRP.CFrame = targetHRP.CFrame - Vector3.new(0, 200, 0)
+			task.wait()
+		end
+	end)
+	
+	-- Método 3: Romper estados para que no se recupere
+	pcall(function()
+		targetHum.PlatformStand = true
+		targetHum.Sit = true
+		targetHum:ChangeState(Enum.HumanoidStateType.Ragdoll)
+	end)
+end
+
+local function SetupTouchFling(char)
+	for _, conn in pairs(TouchConn) do
+		if conn then conn:Disconnect() end
+	end
+	TouchConn = {}
+	
+	for _, part in pairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then
+			local conn = part.Touched:Connect(function(hit)
+				local targetChar = hit:FindFirstAncestorOfClass("Model")
+				local targetPlayer = Players:GetPlayerFromCharacter(targetChar)
+				
+				if targetPlayer and targetPlayer ~= Player and targetChar:FindFirstChild("HumanoidRootPart") then
+					FlingTarget(targetChar)
+				end
+			end)
+			table.insert(TouchConn, conn)
+		end
+	end
 end
 
 local function SetupCharacter(char)
@@ -48,9 +80,9 @@ local function SetupCharacter(char)
 	local HRP = char:WaitForChild("HumanoidRootPart")
 	
 	SetCollisionGroup(char)
-	EnableWalkFling(HRP)
+	SetupTouchFling(char)
 	
-	-- Anti-void al respawnear: resetea física rota
+	-- Anti-void al respawn
 	task.spawn(function()
 		repeat task.wait() until Humanoid.Health > 0
 		task.wait(0.5)
@@ -65,27 +97,19 @@ local function SetupCharacter(char)
 		end
 	end)
 	
-	-- Loop de inmortalidad + anti-efectos COMPATIBLES con fling
+	-- Inmortalidad + anti-efectos sin tocar tu velocidad
 	task.spawn(function()
 		while Humanoid and Humanoid.Parent do
-			-- Inmortalidad
 			if Humanoid.Health < Humanoid.MaxHealth then
 				Humanoid.Health = Humanoid.MaxHealth
 			end
-			
-			-- Estados bloqueados que NO afectan velocidad
 			Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
 			Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
 			Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-			
-			-- Anti-sit/bang sin tocar velocidad
 			Humanoid.Sit = false
 			Humanoid.PlatformStand = false
-			if Humanoid:GetState() == Enum.HumanoidStateType.PlatformStanding then
-				Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-			end
 			
-			-- Anti-bang: rompe welds ajenos
+			-- Anti-bang
 			for _,v in pairs(char:GetDescendants()) do
 				if v:IsA("JointInstance") or v:IsA("WeldConstraint") then
 					local p0, p1 = v.Part0, v.Part1
@@ -94,7 +118,6 @@ local function SetupCharacter(char)
 					end
 				end
 			end
-			
 			task.wait()
 		end
 	end)
