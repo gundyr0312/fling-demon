@@ -7,7 +7,7 @@ local lp = Players.LocalPlayer
 local PlayerGui = lp:WaitForChild("PlayerGui")
 
 local hiddenfling = true -- ya inicia prendido
-local flingPower = 999999 -- máximo del slider: 5000 + 50000
+local flingPower = 9999999 -- máximo del slider: 5000 + 50000
 
 -- Detección que ya tenías
 if not ReplicatedStorage:FindFirstChild("juisdfj0i32i0eidsuf0iok") then
