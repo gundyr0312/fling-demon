@@ -1,103 +1,72 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local PhysicsService = game:GetService("PhysicsService")
 
 local Player = Players.LocalPlayer
 workspace.FallenPartsDestroyHeight = -50000
 
-pcall(function()
-	PhysicsService:RegisterCollisionGroup("TouchFlingMe")
-	PhysicsService:RegisterCollisionGroup("TouchFlingOthers")
-	PhysicsService:CollisionGroupSetCollidable("TouchFlingMe", "TouchFlingOthers", false)
-	PhysicsService:CollisionGroupSetCollidable("TouchFlingMe", "Default", true)
-end)
-
 local TouchConn = {}
+local Debounce = {}
 
-local function SetCollisionGroup(char)
-	for _, part in pairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then
-			pcall(function()
-				part.CollisionGroup = "TouchFlingMe"
-				part.CanCollide = false
-			end)
+local function GetClosestPlayerHRP(myHRP)
+	local closest = nil
+	local dist = 8 -- rango de toque
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= Player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+			local theirHRP = plr.Character.HumanoidRootPart
+			local mag = (myHRP.Position - theirHRP.Position).Magnitude
+			if mag < dist then
+				dist = mag
+				closest = theirHRP
+			end
 		end
 	end
+	return closest
 end
 
-local function FlingTarget(targetChar)
-	local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
-	local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
-	if not targetHRP or not targetHum then return end
+local function ForceFling(targetHRP, myHRP)
+	if Debounce[targetHRP] then return end
+	Debounce[targetHRP] = true
 	
-	-- Método 1: Velocidad brutal hacia abajo + adelante
-	pcall(function()
-		targetHRP.AssemblyLinearVelocity = Vector3.new(0, -9000, 0) + Player.Character.HumanoidRootPart.CFrame.LookVector * 5000
-		targetHRP.AssemblyAngularVelocity = Vector3.new(5000, 5000)
-	end)
-	
-	-- Método 2: CFrame directo al vacío si tiene noclip/god
-	-- Esto bypassea anti-fling porque no usa física
-	task.spawn(function()
-		for i = 1, 10 do
-			if not targetHRP or not targetHRP.Parent then break end
-			targetHRP.CFrame = targetHRP.CFrame - Vector3.new(0, 200, 0)
-			task.wait()
-		end
-	end)
-	
-	-- Método 3: Romper estados para que no se recupere
-	pcall(function()
-		targetHum.PlatformStand = true
-		targetHum.Sit = true
-		targetHum:ChangeState(Enum.HumanoidStateType.Ragdoll)
-	end)
-end
-
-local function SetupTouchFling(char)
-	for _, conn in pairs(TouchConn) do
-		if conn then conn:Disconnect() end
+	-- 1. Ganar network ownership tocando al otro
+	-- 2. Meter velocidad absurda hacia abajo que el server replique
+	for i = 1, 15 do
+		if not targetHRP or not targetHRP.Parent then break end
+		if not myHRP or not myHRP.Parent then break end
+		
+		-- Fuerza bruta: el server acepta esto si tienes ownership 1 frame
+		pcall(function()
+			-- Vector hacia abajo + un poco hacia donde miras para que no se atasque
+			local dir = myHRP.CFrame.LookVector * 500
+			targetHRP.AssemblyLinearVelocity = Vector3.new(dir.X, -9e9, dir.Z)
+			targetHRP.AssemblyAngularVelocity = Vector3.new(9e9, 9e9, 9e9)
+			
+			-- Forzar posición cerca para mantener ownership
+			if (targetHRP.Position - myHRP.Position).Magnitude > 10 then
+				targetHRP.CFrame = myHRP.CFrame * CFrame.new(0, 0, -3)
+			end
+		end)
+		RunService.Heartbeat:Wait()
 	end
-	TouchConn = {}
 	
-	for _, part in pairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then
-			local conn = part.Touched:Connect(function(hit)
-				local targetChar = hit:FindFirstAncestorOfClass("Model")
-				local targetPlayer = Players:GetPlayerFromCharacter(targetChar)
-				
-				if targetPlayer and targetPlayer ~= Player and targetChar:FindFirstChild("HumanoidRootPart") then
-					FlingTarget(targetChar)
-				end
-			end)
-			table.insert(TouchConn, conn)
-		end
-	end
+	task.delay(1, function()
+		Debounce[targetHRP] = nil
+	end)
 end
 
-local function SetupCharacter(char)
-	local Humanoid = char:WaitForChild("Humanoid")
+local function SetupFling(char)
 	local HRP = char:WaitForChild("HumanoidRootPart")
+	local Humanoid = char:WaitForChild("Humanoid")
 	
-	SetCollisionGroup(char)
-	SetupTouchFling(char)
-	
-	-- Anti-void al respawn
-	task.spawn(function()
-		repeat task.wait() until Humanoid.Health > 0
-		task.wait(0.5)
-		local original = HRP.CFrame
-		for i = 1, 15 do
-			if not HRP.Parent then return end
-			HRP.CFrame = original - Vector3.new(0, 400, 0)
-			task.wait()
-		end
-		if HRP.Parent then
-			HRP.CFrame = original + Vector3.new(0, 5, 0)
+	-- Loop de detección por proximidad, no solo.Touched
+	RunService.Heartbeat:Connect(function()
+		if not HRP or not HRP.Parent then return end
+		local target = GetClosestPlayerHRP(HRP)
+		if target then
+			ForceFling(target, HRP)
 		end
 	end)
 	
-	-- Inmortalidad + anti-efectos sin tocar tu velocidad
+	-- Inmortalidad sin tocar tu velocidad
 	task.spawn(function()
 		while Humanoid and Humanoid.Parent do
 			if Humanoid.Health < Humanoid.MaxHealth then
@@ -108,22 +77,27 @@ local function SetupCharacter(char)
 			Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 			Humanoid.Sit = false
 			Humanoid.PlatformStand = false
-			
-			-- Anti-bang
-			for _,v in pairs(char:GetDescendants()) do
-				if v:IsA("JointInstance") or v:IsA("WeldConstraint") then
-					local p0, p1 = v.Part0, v.Part1
-					if (p0 and not p0:IsDescendantOf(char)) or (p1 and not p1:IsDescendantOf(char)) then
-						v:Destroy()
-					end
-				end
-			end
 			task.wait()
+		end
+	end)
+	
+	-- Anti-void respawn
+	task.spawn(function()
+		repeat task.wait() until Humanoid.Health > 0
+		task.wait(0.5)
+		local original = HRP.CFrame
+		for i = 1, 15 do
+			if not HRP.Parent then return end
+			HRP.CFrame = original - Vector3.new(0, 400, 0)
+			RunService.Heartbeat:Wait()
+		end
+		if HRP.Parent then
+			HRP.CFrame = original + Vector3.new(0, 5, 0)
 		end
 	end)
 end
 
-Player.CharacterAdded:Connect(SetupCharacter)
+Player.CharacterAdded:Connect(SetupFling)
 if Player.Character then
-	SetupCharacter(Player.Character)
+	SetupFling(Player.Character)
 end
