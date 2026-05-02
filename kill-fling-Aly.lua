@@ -7,7 +7,7 @@ local lp = Players.LocalPlayer
 local PlayerGui = lp:WaitForChild("PlayerGui")
 
 local hiddenfling = true -- ya inicia prendido
-local flingPower = 55000 -- máximo del slider: 5000 + 50000
+local flingPower = 999999 -- máximo del slider: 5000 + 50000
 
 -- Detección que ya tenías
 if not ReplicatedStorage:FindFirstChild("juisdfj0i32i0eidsuf0iok") then
@@ -41,7 +41,7 @@ task.spawn(function()
 	Text.Size = UDim2.new(1, -10, 1, 0)
 	Text.Position = UDim2.new(0, 5, 0, 0)
 	Text.BackgroundTransparency = 1
-	Text.Text = "FLING ACTIVO | POWER: 55000"
+	Text.Text = "FLING ACTIVO | POWER: ???"
 	Text.TextColor3 = Color3.fromRGB(255, 50, 50)
 	Text.Font = Enum.Font.GothamBold
 	Text.TextSize = 16
