@@ -4,69 +4,67 @@ local RunService = game:GetService("RunService")
 local Player = Players.LocalPlayer
 workspace.FallenPartsDestroyHeight = -50000
 
-local TouchConn = {}
-local Debounce = {}
+local FlingParts = {}
 
-local function GetClosestPlayerHRP(myHRP)
-	local closest = nil
-	local dist = 8 -- rango de toque
-	for _, plr in pairs(Players:GetPlayers()) do
-		if plr ~= Player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-			local theirHRP = plr.Character.HumanoidRootPart
-			local mag = (myHRP.Position - theirHRP.Position).Magnitude
-			if mag < dist then
-				dist = mag
-				closest = theirHRP
-			end
-		end
+local function ClearFlingParts()
+	for _, v in pairs(FlingParts) do
+		if v then v:Destroy() end
 	end
-	return closest
+	FlingParts = {}
 end
 
-local function ForceFling(targetHRP, myHRP)
-	if Debounce[targetHRP] then return end
-	Debounce[targetHRP] = true
-	
-	-- 1. Ganar network ownership tocando al otro
-	-- 2. Meter velocidad absurda hacia abajo que el server replique
-	for i = 1, 15 do
-		if not targetHRP or not targetHRP.Parent then break end
-		if not myHRP or not myHRP.Parent then break end
-		
-		-- Fuerza bruta: el server acepta esto si tienes ownership 1 frame
-		pcall(function()
-			-- Vector hacia abajo + un poco hacia donde miras para que no se atasque
-			local dir = myHRP.CFrame.LookVector * 500
-			targetHRP.AssemblyLinearVelocity = Vector3.new(dir.X, -9e9, dir.Z)
-			targetHRP.AssemblyAngularVelocity = Vector3.new(9e9, 9e9, 9e9)
-			
-			-- Forzar posición cerca para mantener ownership
-			if (targetHRP.Position - myHRP.Position).Magnitude > 10 then
-				targetHRP.CFrame = myHRP.CFrame * CFrame.new(0, 0, -3)
-			end
-		end)
-		RunService.Heartbeat:Wait()
-	end
-	
-	task.delay(1, function()
-		Debounce[targetHRP] = nil
-	end)
-end
-
-local function SetupFling(char)
+local function CreateFlingRig(char)
+	ClearFlingParts()
 	local HRP = char:WaitForChild("HumanoidRootPart")
 	local Humanoid = char:WaitForChild("Humanoid")
 	
-	-- Loop de detección por proximidad, no solo.Touched
-	RunService.Heartbeat:Connect(function()
-		if not HRP or not HRP.Parent then return end
-		local target = GetClosestPlayerHRP(HRP)
-		if target then
-			ForceFling(target, HRP)
-		end
-	end)
+	-- 1. Parte invisible gigante soldada a ti con masa absurda
+	local FlingPart = Instance.new("Part")
+	FlingPart.Name = "FlingRig"
+	FlingPart.Size = Vector3.new(8, 8, 8) -- hitbox grande
+	FlingPart.Transparency = 1
+	FlingPart.CanCollide = true
+	FlingPart.Massless = false
+	FlingPart.CustomPhysicalProperties = PhysicalProperties.new(9e9, 0, 0, 0, 0) -- densidad 9e9
+	FlingPart.CFrame = HRP.CFrame
+	FlingPart.Parent = char
 	
-	-- Inmortalidad sin tocar tu velocidad
+	local Weld = Instance.new("WeldConstraint")
+	Weld.Part0 = HRP
+	Weld.Part1 = FlingPart
+	Weld.Parent = FlingPart
+	
+	-- 2. BodyVelocity hacia abajo permanente en la parte
+	local BV = Instance.new("BodyVelocity")
+	BV.MaxForce = Vector3.new(0, 9e9, 0) -- solo fuerza en Y
+	BV.Velocity = Vector3.new(0, -9000, 0) -- velocidad base hacia abajo
+	BV.P = 1250
+	BV.Parent = FlingPart
+	
+	-- 3. BodyAngularVelocity para que al tocar genere torque loco
+	local BAV = Instance.new("BodyAngularVelocity")
+	BAV.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+	BAV.AngularVelocity = Vector3.new(0, 0, 0) -- no giras tú, solo la parte tiene el torque
+	BAV.P = 9e9
+	BAV.Parent = FlingPart
+	
+	table.insert(FlingParts, FlingPart)
+	
+	-- 4. Partes extra alrededor para aumentar el área de toque
+	for i = 1, 4 do
+		local Extra = FlingPart:Clone()
+		Extra.Size = Vector3.new(4, 4, 4)
+		local Offset = CFrame.new(math.cos(i * 1.57) * 3, 0, math.sin(i * 1.57) * 3)
+		Extra.CFrame = HRP.CFrame * Offset
+		local W = Instance.new("WeldConstraint")
+		W.Part0 = HRP
+		W.Part1 = Extra
+		W.Parent = Extra
+		Extra.Parent = char
+		table.insert(FlingParts, Extra)
+	end
+	
+	-- Inmortalidad compatible
 	task.spawn(function()
 		while Humanoid and Humanoid.Parent do
 			if Humanoid.Health < Humanoid.MaxHealth then
@@ -80,24 +78,9 @@ local function SetupFling(char)
 			task.wait()
 		end
 	end)
-	
-	-- Anti-void respawn
-	task.spawn(function()
-		repeat task.wait() until Humanoid.Health > 0
-		task.wait(0.5)
-		local original = HRP.CFrame
-		for i = 1, 15 do
-			if not HRP.Parent then return end
-			HRP.CFrame = original - Vector3.new(0, 400, 0)
-			RunService.Heartbeat:Wait()
-		end
-		if HRP.Parent then
-			HRP.CFrame = original + Vector3.new(0, 5, 0)
-		end
-	end)
 end
 
-Player.CharacterAdded:Connect(SetupFling)
+Player.CharacterAdded:Connect(CreateFlingRig)
 if Player.Character then
-	SetupFling(Player.Character)
+	CreateFlingRig(Player.Character)
 end
