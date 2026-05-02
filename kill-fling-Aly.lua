@@ -1,4 +1,4 @@
--- // EXECUTIONER-FLING V7.1 (Auto-Stop on Death)
+-- // EXECUTIONER-FLING V8.0 (Enhanced & Auto-Stop)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -6,71 +6,65 @@ local LocalPlayer = Players.LocalPlayer
 local function startExecutioner()
     local char = LocalPlayer.Character
     if not char then return end
-
     
     local Root = char:WaitForChild("HumanoidRootPart")
     local Humanoid = char:WaitForChild("Humanoid")
-
     
-    -- FUERZA PARA KICK (650k)
-    local KillForce = 650000
+    -- Configuración de Super-Fuerza
     local IsActive = true
+    local PowerValue = 99999999 -- Valor del script de referencia
     
-    -- Crear Hitbox
+    -- Crear Hitbox Fantasma Potenciada
     local GhostPart = Instance.new("Part")
-    GhostPart.Name = "Executioner_Hitbox"
-    GhostPart.Size = Vector3.new(14, 14, 14)
-    GhostPart.Transparency = 1 -- Cambia a 0.5 si quieres ver la caja roja
-    GhostPart.Color = Color3.fromRGB(255, 0, 0)
+    GhostPart.Name = "Executioner_Ultra_Hitbox"
+    GhostPart.Size = Vector3.new(15, 15, 15)
+    GhostPart.Transparency = 1 
     GhostPart.CanCollide = false
+    GhostPart.Massless = true
     GhostPart.Parent = workspace
     
-    local Velocity = Instance.new("BodyVelocity")
-    Velocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    Velocity.Velocity = Vector3.new(0, KillForce, 0)
-    Velocity.Parent = GhostPart
-    
-    local Angular = Instance.new("BodyAngularVelocity")
-    Angular.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    Angular.AngularVelocity = Vector3.new(500, 500, 500)
-    Angular.Parent = GhostPart
-
-    -- CONEXIÓN PRINCIPAL
-    local HeartbeatConnection
-    HeartbeatConnection = RunService.Heartbeat:Connect(function()
-        -- SI MUERES O EL PERSONAJE DESAPARECE, SE DESACTIVA TODO
+    -- Motor de Fling (Oscilación de Velocidad)
+    local FlingConnection
+    FlingConnection = RunService.Heartbeat:Connect(function()
+        -- DETECCIÓN DE MUERTE: Si el Humanoid muere, se destruye todo el script
         if Humanoid.Health <= 0 or not char.Parent or not IsActive then
             IsActive = false
-            HeartbeatConnection:Disconnect()
+            FlingConnection:Disconnect()
             GhostPart:Destroy()
-            print("💀 EXECUTIONER DESACTIVADO POR MUERTE")
+            print("💀 EXECUTIONER V8 FINALIZADO")
             return
         end
         
-        -- Posicionamiento y Físicas
-        GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -5)
-        GhostPart.AssemblyLinearVelocity = Vector3.new(0, KillForce, 0)
+        -- Sincronización de la Hitbox
+        GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -4)
         
-        -- Noclip constante mientras esté vivo para evitar bugs
+        -- MÉTODO WALK-FLING POTENCIADO: Alternancia de velocidad extrema
+        local oldVel = GhostPart.Velocity
+        GhostPart.Velocity = oldVel * PowerValue + Vector3.new(0, PowerValue, 0)
+        
+        -- Noclip para evitar que tú salgas volando
         for _, part in pairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CanCollide = false
             end
         end
         
-        -- Bypass de Radio (Propiedad de red)
+        -- Forzar Radio de Simulación para afectar a otros
         pcall(function()
             LocalPlayer.SimulationRadius = math.huge
             settings().Physics.AllowSleep = false
         end)
+        
+        RunService.RenderStepped:Wait()
+        GhostPart.Velocity = oldVel
     end)
     
-    print("💀 EXECUTIONER V7.1 ACTIVO (Se apagará al morir)")
+    print("💀 EXECUTIONER V8 ACTIVO - Fuerza Máxima Aplicada")
 end
 
--- Ejecutar una sola vez
+-- Ejecución única
 if LocalPlayer.Character then 
     startExecutioner() 
 end
 
--- Nota: He quitado el "CharacterAdded" para que NO se vuelva a activar solo.
+-- Se eliminó CharacterAdded para asegurar que NO se reinicie tras morir.
