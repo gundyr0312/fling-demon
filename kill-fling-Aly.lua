@@ -1,85 +1,93 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local PhysicsService = game:GetService("PhysicsService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
-local Player = Players.LocalPlayer
-local AuraRange = 25
-local Debounce = {}
+local lp = Players.LocalPlayer
+local PlayerGui = lp:WaitForChild("PlayerGui")
 
--- 1. ESPERA A QUE EL OTRO SCRIPT TERMINE DE CARGAR SUS CONEXIONES
-task.delay(12, function()
-	-- Rompe los HeartbeatLoops que ponen Velocity = 0 a otros
-	for _, v in pairs(getconnections(RunService.Heartbeat)) do
-		local s = tostring(v.Function)
-		if s:find("RotVelocity") or s:find("Velocity = Vector3.new(0,0,0)") then
-			pcall(function() v:Disable() end)
-		end
-	end
+local hiddenfling = true -- ya inicia prendido
+local flingPower = 55000 -- máximo del slider: 5000 + 50000
+
+-- Detección que ya tenías
+if not ReplicatedStorage:FindFirstChild("juisdfj0i32i0eidsuf0iok") then
+	local detection = Instance.new("Decal")
+	detection.Name = "juisdfj0i32i0eidsuf0iok"
+	detection.Parent = ReplicatedStorage
+end
+
+-- Mensajito de 3 segundos
+task.spawn(function()
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Name = "FlingNotif"
+	ScreenGui.ResetOnSpawn = false
+	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	ScreenGui.Parent = PlayerGui
+
+	local Frame = Instance.new("Frame", ScreenGui)
+	Frame.Size = UDim2.new(0, 280, 0, 50)
+	Frame.Position = UDim2.new(1, 300, 1, -60)
+	Frame.AnchorPoint = Vector2.new(0, 1)
+	Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	Frame.BackgroundTransparency = 0.1
+	Frame.BorderSizePixel = 0
+	Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 8)
+
+	local UIStroke = Instance.new("UIStroke", Frame)
+	UIStroke.Color = Color3.fromRGB(255, 0, 0)
+	UIStroke.Thickness = 2
+
+	local Text = Instance.new("TextLabel", Frame)
+	Text.Size = UDim2.new(1, -10, 1, 0)
+	Text.Position = UDim2.new(0, 5, 0, 0)
+	Text.BackgroundTransparency = 1
+	Text.Text = "FLING ACTIVO | POWER: 55000"
+	Text.TextColor3 = Color3.fromRGB(255, 50, 50)
+	Text.Font = Enum.Font.GothamBold
+	Text.TextSize = 16
+	Text.TextXAlignment = Enum.TextXAlignment.Left
+
+	local TweenIn = TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {
+		Position = UDim2.new(1, -290, 1, -10)
+	})
+	TweenIn:Play()
+	task.wait(3)
+	local TweenOut = TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+		Position = UDim2.new(1, 300, 1, -60)
+	})
+	TweenOut:Play()
+	TweenOut.Completed:Wait()
+	ScreenGui:Destroy()
 end)
 
-local function SetupKillAura(char)
-	local Humanoid = char:WaitForChild("Humanoid")
-	local HRP = char:WaitForChild("HumanoidRootPart")
+-- Lógica del fling
+local function fling()
+	local hrp, c, vel, movel = nil, nil, nil, 0.1
 	
-	-- 2. ANULA LOS 4 BLOQUEOS DEL OTRO SCRIPT CADA FRAME
-	RunService.Heartbeat:Connect(function()
-		if not HRP or not HRP.Parent then return end
-		
-		-- Bloqueo 1: Desancla si el otro script te ancla
-		if HRP.Anchored then
-			HRP.Anchored = false
-		end
-		
-		-- Bloqueo 2: Quita el cap de 150 de velocidad
-		-- No hacemos nada, solo no reseteamos nosotros
-		
-		-- Bloqueo 3: Fuerza CanCollide = true a otros para que choquen
-		for _, plr in pairs(Players:GetPlayers()) do
-			if plr ~= Player and plr.Character then
-				local theirHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-				if theirHRP then
-					theirHRP.CanCollide = true
-					-- Bloqueo 4: Saca al otro de "AntiflingPlayers" para que choque
-					pcall(function()
-						theirHRP.CollisionGroup = "Default"
-					end)
+	while true do
+		RunService.Heartbeat:Wait()
+		if hiddenfling then
+			while hiddenfling and not (c and c.Parent and hrp and hrp.Parent) do
+				RunService.Heartbeat:Wait()
+				c = lp.Character
+				hrp = c and c:FindFirstChild("HumanoidRootPart")
+			end
+
+			if hiddenfling then
+				vel = hrp.Velocity
+				hrp.Velocity = vel * flingPower + Vector3.new(0, flingPower, 0)
+				RunService.RenderStepped:Wait()
+				if c and c.Parent and hrp and hrp.Parent then
+					hrp.Velocity = vel
+				end
+				RunService.Stepped:Wait()
+				if c and c.Parent and hrp and hrp.Parent then
+					hrp.Velocity = vel + Vector3.new(0, movel, 0)
+					movel = movel * -1
 				end
 			end
 		end
-	end)
-	
-	-- 3. KILL AURA REAL: Daño + Void por proximidad
-	RunService.Heartbeat:Connect(function()
-		if not HRP or not HRP.Parent then return end
-		
-		for _, plr in pairs(Players:GetPlayers()) do
-			if plr ~= Player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-				local theirHRP = plr.Character.HumanoidRootPart
-				local theirHum = plr.Character:FindFirstChildOfClass("Humanoid")
-				local dist = (HRP.Position - theirHRP.Position).Magnitude
-				
-				if dist < AuraRange and not Debounce[plr] and theirHum and theirHum.Health > 0 then
-					Debounce[plr] = true
-					
-					-- Método 1: Kill directo. Esto ignora el god del otro script porque es set directo
-					pcall(function()
-						theirHum.Health = 0
-					end)
-					
-					-- Método 2: Void para bypass si tiene anti-damage
-					pcall(function()
-						theirHRP.AssemblyLinearVelocity = Vector3.new(0, -9e12, 0)
-						theirHRP.CFrame = theirHRP.CFrame - Vector3.new(0, 1000, 0)
-					end)
-					
-					task.delay(0.05, function() Debounce[plr] = nil end)
-				end
-			end
-		end
-	end)
+	end
 end
 
-Player.CharacterAdded:Connect(SetupKillAura)
-if Player.Character then
-	SetupKillAura(Player.Character)
-end
+fling()
