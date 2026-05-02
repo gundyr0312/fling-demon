@@ -1,3 +1,4 @@
+-- // EXECUTIONER-FLING V12 (REAL METHOD)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -23,49 +24,31 @@ local function startExecutioner()
     local Humanoid = char:WaitForChild("Humanoid")
     
     local IsActive = true
-    local PowerValue = 900
     
-    -- 🔒 ANCLARTE (CLAVE PARA NO SALIR VOLANDO)
-    Root.Anchored = true
-
-    -- 🔥 HITBOX INDEPENDIENTE
-    local GhostPart = Instance.new("Part")
-    GhostPart.Name = "Executioner_Hitbox"
-    GhostPart.Size = Vector3.new(10, 10, 10)
-    GhostPart.Transparency = 1
-    GhostPart.CanCollide = true
-    GhostPart.Anchored = false
-    GhostPart.Massless = false
-    GhostPart.Parent = workspace
-
-    -- ⚙️ LOOP
     local FlingConnection
     FlingConnection = RunService.Heartbeat:Connect(function()
         if not IsActive or Humanoid.Health <= 0 or not char.Parent then
             IsActive = false
-            
             if FlingConnection then FlingConnection:Disconnect() end
-            if GhostPart then GhostPart:Destroy() end
-            
-            Root.Anchored = false -- 🔓 devolver control
-            
             print("💀 EXECUTIONER DETENIDO")
             return
         end
         
-        -- Posicionar delante tuyo
-        GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -4)
-
-        -- 💥 FUERZA
-        GhostPart.AssemblyLinearVelocity =
-            Root.CFrame.LookVector * PowerValue + Vector3.new(0, PowerValue, 0)
+        -- 💥 MÉTODO REAL (igual al OMNI)
+        local oldVel = Root.AssemblyLinearVelocity
+        
+        Root.AssemblyLinearVelocity =
+            oldVel * 800 + Vector3.new(0, 6000, 0)
+        
+        RunService.RenderStepped:Wait()
+        
+        Root.AssemblyLinearVelocity = oldVel
     end)
 
     notify()
-    print("💀 EXECUTIONER V11 ACTIVO")
+    print("💀 EXECUTIONER V12 ACTIVO")
 end
 
--- ▶ Ejecutar
 if LocalPlayer.Character then
     startExecutioner()
 end
