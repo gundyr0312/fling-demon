@@ -1,86 +1,85 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local PhysicsService = game:GetService("PhysicsService")
 
 local Player = Players.LocalPlayer
-workspace.FallenPartsDestroyHeight = -50000
+local AuraRange = 25
+local Debounce = {}
 
-local FlingParts = {}
-
-local function ClearFlingParts()
-	for _, v in pairs(FlingParts) do
-		if v then v:Destroy() end
+-- 1. ESPERA A QUE EL OTRO SCRIPT TERMINE DE CARGAR SUS CONEXIONES
+task.delay(12, function()
+	-- Rompe los HeartbeatLoops que ponen Velocity = 0 a otros
+	for _, v in pairs(getconnections(RunService.Heartbeat)) do
+		local s = tostring(v.Function)
+		if s:find("RotVelocity") or s:find("Velocity = Vector3.new(0,0,0)") then
+			pcall(function() v:Disable() end)
+		end
 	end
-	FlingParts = {}
-end
+end)
 
-local function CreateFlingRig(char)
-	ClearFlingParts()
-	local HRP = char:WaitForChild("HumanoidRootPart")
+local function SetupKillAura(char)
 	local Humanoid = char:WaitForChild("Humanoid")
+	local HRP = char:WaitForChild("HumanoidRootPart")
 	
-	-- 1. Parte invisible gigante soldada a ti con masa absurda
-	local FlingPart = Instance.new("Part")
-	FlingPart.Name = "FlingRig"
-	FlingPart.Size = Vector3.new(8, 8, 8) -- hitbox grande
-	FlingPart.Transparency = 1
-	FlingPart.CanCollide = true
-	FlingPart.Massless = false
-	FlingPart.CustomPhysicalProperties = PhysicalProperties.new(9e9, 0, 0, 0, 0) -- densidad 9e9
-	FlingPart.CFrame = HRP.CFrame
-	FlingPart.Parent = char
-	
-	local Weld = Instance.new("WeldConstraint")
-	Weld.Part0 = HRP
-	Weld.Part1 = FlingPart
-	Weld.Parent = FlingPart
-	
-	-- 2. BodyVelocity hacia abajo permanente en la parte
-	local BV = Instance.new("BodyVelocity")
-	BV.MaxForce = Vector3.new(0, 9e9, 0) -- solo fuerza en Y
-	BV.Velocity = Vector3.new(0, -9000, 0) -- velocidad base hacia abajo
-	BV.P = 1250
-	BV.Parent = FlingPart
-	
-	-- 3. BodyAngularVelocity para que al tocar genere torque loco
-	local BAV = Instance.new("BodyAngularVelocity")
-	BAV.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-	BAV.AngularVelocity = Vector3.new(0, 0, 0) -- no giras tú, solo la parte tiene el torque
-	BAV.P = 9e9
-	BAV.Parent = FlingPart
-	
-	table.insert(FlingParts, FlingPart)
-	
-	-- 4. Partes extra alrededor para aumentar el área de toque
-	for i = 1, 4 do
-		local Extra = FlingPart:Clone()
-		Extra.Size = Vector3.new(4, 4, 4)
-		local Offset = CFrame.new(math.cos(i * 1.57) * 3, 0, math.sin(i * 1.57) * 3)
-		Extra.CFrame = HRP.CFrame * Offset
-		local W = Instance.new("WeldConstraint")
-		W.Part0 = HRP
-		W.Part1 = Extra
-		W.Parent = Extra
-		Extra.Parent = char
-		table.insert(FlingParts, Extra)
-	end
-	
-	-- Inmortalidad compatible
-	task.spawn(function()
-		while Humanoid and Humanoid.Parent do
-			if Humanoid.Health < Humanoid.MaxHealth then
-				Humanoid.Health = Humanoid.MaxHealth
+	-- 2. ANULA LOS 4 BLOQUEOS DEL OTRO SCRIPT CADA FRAME
+	RunService.Heartbeat:Connect(function()
+		if not HRP or not HRP.Parent then return end
+		
+		-- Bloqueo 1: Desancla si el otro script te ancla
+		if HRP.Anchored then
+			HRP.Anchored = false
+		end
+		
+		-- Bloqueo 2: Quita el cap de 150 de velocidad
+		-- No hacemos nada, solo no reseteamos nosotros
+		
+		-- Bloqueo 3: Fuerza CanCollide = true a otros para que choquen
+		for _, plr in pairs(Players:GetPlayers()) do
+			if plr ~= Player and plr.Character then
+				local theirHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+				if theirHRP then
+					theirHRP.CanCollide = true
+					-- Bloqueo 4: Saca al otro de "AntiflingPlayers" para que choque
+					pcall(function()
+						theirHRP.CollisionGroup = "Default"
+					end)
+				end
 			end
-			Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-			Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-			Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-			Humanoid.Sit = false
-			Humanoid.PlatformStand = false
-			task.wait()
+		end
+	end)
+	
+	-- 3. KILL AURA REAL: Daño + Void por proximidad
+	RunService.Heartbeat:Connect(function()
+		if not HRP or not HRP.Parent then return end
+		
+		for _, plr in pairs(Players:GetPlayers()) do
+			if plr ~= Player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+				local theirHRP = plr.Character.HumanoidRootPart
+				local theirHum = plr.Character:FindFirstChildOfClass("Humanoid")
+				local dist = (HRP.Position - theirHRP.Position).Magnitude
+				
+				if dist < AuraRange and not Debounce[plr] and theirHum and theirHum.Health > 0 then
+					Debounce[plr] = true
+					
+					-- Método 1: Kill directo. Esto ignora el god del otro script porque es set directo
+					pcall(function()
+						theirHum.Health = 0
+					end)
+					
+					-- Método 2: Void para bypass si tiene anti-damage
+					pcall(function()
+						theirHRP.AssemblyLinearVelocity = Vector3.new(0, -9e12, 0)
+						theirHRP.CFrame = theirHRP.CFrame - Vector3.new(0, 1000, 0)
+					end)
+					
+					task.delay(0.05, function() Debounce[plr] = nil end)
+				end
+			end
 		end
 	end)
 end
 
-Player.CharacterAdded:Connect(CreateFlingRig)
+Player.CharacterAdded:Connect(SetupKillAura)
 if Player.Character then
-	CreateFlingRig(Player.Character)
+	SetupKillAura(Player.Character)
 end
