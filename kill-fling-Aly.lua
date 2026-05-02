@@ -20,7 +20,7 @@ local function EnableWalkFling(HRP)
 	WalkFlingConn = RunService.Heartbeat:Connect(function()
 		if not HRP or not HRP.Parent then return end
 		-- Solo rotación, no tocamos LinearVelocity para que no te frene
-		HRP.AssemblyAngularVelocity = Vector3.new(0, 10000, 0)
+		HRP.AssemblyAngularVelocity = Vector3.new(0, 9999999, 0)
 	end)
 end
 
