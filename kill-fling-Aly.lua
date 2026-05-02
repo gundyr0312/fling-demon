@@ -6,9 +6,11 @@ local LocalPlayer = Players.LocalPlayer
 local function startExecutioner()
     local char = LocalPlayer.Character
     if not char then return end
+
     
     local Root = char:WaitForChild("HumanoidRootPart")
     local Humanoid = char:WaitForChild("Humanoid")
+
     
     -- FUERZA PARA KICK (650k)
     local KillForce = 650000
