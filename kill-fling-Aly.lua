@@ -1,4 +1,3 @@
--- // EXECUTIONER-FLING V11 (FINAL ESTABLE)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
