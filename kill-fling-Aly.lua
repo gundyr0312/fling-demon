@@ -1,4 +1,5 @@
--- // EXECUTIONER-FLING V8.0 (Enhanced & Auto-Stop)
+-- // EXECUTIONER-FLING V9 (FIXED)
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -10,61 +11,50 @@ local function startExecutioner()
     local Root = char:WaitForChild("HumanoidRootPart")
     local Humanoid = char:WaitForChild("Humanoid")
     
-    -- Configuración de Super-Fuerza
     local IsActive = true
-    local PowerValue = 99999999 -- Valor del script de referencia
+    local PowerValue = 500 -- ajustable
     
-    -- Crear Hitbox Fantasma Potenciada
+    -- 🔥 HITBOX REAL (CON COLISIÓN)
     local GhostPart = Instance.new("Part")
-    GhostPart.Name = "Executioner_Ultra_Hitbox"
-    GhostPart.Size = Vector3.new(15, 15, 15)
-    GhostPart.Transparency = 1 
-    GhostPart.CanCollide = false
-    GhostPart.Massless = true
+    GhostPart.Name = "Executioner_Hitbox"
+    GhostPart.Size = Vector3.new(8, 8, 8)
+    GhostPart.Transparency = 1
+    GhostPart.CanCollide = true
+    GhostPart.Anchored = false
+    GhostPart.Massless = false
     GhostPart.Parent = workspace
-    
-    -- Motor de Fling (Oscilación de Velocidad)
+
+    -- 🔗 SOLDAR AL PERSONAJE
+    local Weld = Instance.new("WeldConstraint")
+    Weld.Part0 = GhostPart
+    Weld.Part1 = Root
+    Weld.Parent = GhostPart
+
+    GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -3)
+
+    -- ⚙️ LOOP PRINCIPAL
     local FlingConnection
     FlingConnection = RunService.Heartbeat:Connect(function()
-        -- DETECCIÓN DE MUERTE: Si el Humanoid muere, se destruye todo el script
-        if Humanoid.Health <= 0 or not char.Parent or not IsActive then
+        if not IsActive or Humanoid.Health <= 0 or not char.Parent then
             IsActive = false
-            FlingConnection:Disconnect()
-            GhostPart:Destroy()
-            print("💀 EXECUTIONER V8 FINALIZADO")
+            if FlingConnection then FlingConnection:Disconnect() end
+            if GhostPart then GhostPart:Destroy() end
+            print("💀 EXECUTIONER DETENIDO")
             return
         end
         
-        -- Sincronización de la Hitbox
-        GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -4)
-        
-        -- MÉTODO WALK-FLING POTENCIADO: Alternancia de velocidad extrema
-        local oldVel = GhostPart.Velocity
-        GhostPart.Velocity = oldVel * PowerValue + Vector3.new(0, PowerValue, 0)
-        
-        -- Noclip para evitar que tú salgas volando
-        for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-        
-        -- Forzar Radio de Simulación para afectar a otros
-        pcall(function()
-            LocalPlayer.SimulationRadius = math.huge
-            settings().Physics.AllowSleep = false
-        end)
-        
-        RunService.RenderStepped:Wait()
-        GhostPart.Velocity = oldVel
+        -- Mantener hitbox enfrente
+        GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -3)
+
+        -- 💥 FUERZA REAL (NUEVO MÉTODO)
+        GhostPart.AssemblyLinearVelocity = Root.CFrame.LookVector * PowerValue 
+            + Vector3.new(0, PowerValue, 0)
     end)
-    
-    print("💀 EXECUTIONER V8 ACTIVO - Fuerza Máxima Aplicada")
+
+    print("💀 EXECUTIONER ACTIVO (V9)")
 end
 
--- Ejecución única
-if LocalPlayer.Character then 
-    startExecutioner() 
+-- ▶ Ejecutar una sola vez
+if LocalPlayer.Character then
+    startExecutioner()
 end
-
--- Se eliminó CharacterAdded para asegurar que NO se reinicie tras morir.
