@@ -1,4 +1,4 @@
--- // EXECUTIONER-FLING V7 (Ghost Hitbox Edition)
+-- EXECUTIONER-FLING V7.1 (Server Kick Edition)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -7,64 +7,74 @@ local function startExecutioner(char)
     local Root = char:WaitForChild("HumanoidRootPart")
     local Humanoid = char:WaitForChild("Humanoid")
     
-    -- FUERZA LETAL (Masiva pero en un objeto externo)
-    local KillForce = 1e25 
+    -- FUERZA PARA KICK (650k = servidor detecta)
+    local KillForce = 650000
     
-    -- 1. Creamos el "Hitbox Fantasma"
+    -- Hitbox fantasma
     local GhostPart = Instance.new("Part")
     GhostPart.Name = "Executioner_Hitbox"
-    GhostPart.Size = Vector3.new(5, 5, 5) -- Tamaño del área de golpe
-    GhostPart.Transparency = 0.8 -- Casi invisible (puedes poner 1)
+    GhostPart.Size = Vector3.new(12, 12, 12)
+    GhostPart.Transparency = 1
     GhostPart.Color = Color3.fromRGB(255, 0, 0)
     GhostPart.CanCollide = false
-    GhostPart.Massless = true
-    GhostPart.Parent = char
-
-    -- 2. Le aplicamos la fuerza infinita al objeto fantasma
+    GhostPart.Massless = false
+    GhostPart.CustomPhysicalProperties = PhysicalProperties.new(100, 0, 0)
+    GhostPart.Parent = workspace
+    
+    -- Velocity principal
     local Velocity = Instance.new("BodyVelocity")
-    Velocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    Velocity.Velocity = Vector3.new(KillForce, KillForce, KillForce)
+    Velocity.MaxForce = Vector3.new(1000000, 1000000, 1000000)
+    Velocity.Velocity = Vector3.new(0, KillForce, 0)
+    Velocity.P = 10000
     Velocity.Parent = GhostPart
-
-    -- 3. Motor de Teletransporte y Simulación
+    
+    -- Rotación para desestabilizar
+    local Angular = Instance.new("BodyAngularVelocity")
+    Angular.MaxTorque = Vector3.new(1000000, 1000000, 1000000)
+    Angular.AngularVelocity = Vector3.new(500, 500, 500)
+    Angular.Parent = GhostPart
+    
+    -- Motor principal
     local connection
     connection = RunService.Heartbeat:Connect(function()
-        if not char.Parent or not GhostPart.Parent then 
-            connection:Disconnect() 
+        if not char.Parent or not Root.Parent then 
+            connection:Disconnect()
+            GhostPart:Destroy()
             return 
         end
         
-        -- El objeto fantasma siempre estará un poco delante de ti
-        GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -3)
-        GhostPart.Velocity = Vector3.new(KillForce, KillForce, KillForce)
-
-        -- Robamos la física del área
+        -- Posicionar delante del jugador
+        GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -5)
+        GhostPart.AssemblyLinearVelocity = Vector3.new(0, KillForce, 0)
+        
+        -- Aumentar radio de simulación
         pcall(function()
             settings().Physics.AllowSleep = false
-            LocalPlayer.SimulationRadius = 1e10
-            LocalPlayer.MaxSimulationRadius = 1e10
+            LocalPlayer.SimulationRadius = 1000
         end)
     end)
-
-    -- 4. Protección para ti (Sin colisiones internas)
+    
+    -- Protección anti-colisión propia
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") and part ~= Root then
             part.CanCollide = false
         end
     end
     
-    -- Seguridad: Si el fantasma se separa demasiado, lo regresa
+    -- Mantener hitbox cerca
     task.spawn(function()
-        while char.Parent do
-            if (GhostPart.Position - Root.Position).Magnitude > 10 then
-                GhostPart.CFrame = Root.CFrame
+        while char.Parent and GhostPart.Parent do
+            if (GhostPart.Position - Root.Position).Magnitude > 15 then
+                GhostPart.CFrame = Root.CFrame * CFrame.new(0, 0, -5)
             end
-            task.wait()
+            task.wait(0.1)
         end
     end)
 end
 
-if LocalPlayer.Character then startExecutioner(LocalPlayer.Character) end
+if LocalPlayer.Character then 
+    startExecutioner(LocalPlayer.Character) 
+end
 LocalPlayer.CharacterAdded:Connect(startExecutioner)
 
-print("💀 EXECUTIONER V7: El escudo rojo frente a ti desintegrará a quien toque.")
+print("💀 EXECUTIONER V7.1 ACTIVO - Fuerza: 650k (Server Kick)")
