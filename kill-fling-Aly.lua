@@ -1,54 +1,85 @@
--- // EXECUTIONER-FLING V12 (REAL METHOD)
+-- // EXECUTIONER V13 (ANTI + FLING BALANCEADO)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 
-local LocalPlayer = Players.LocalPlayer
+local Player = Players.LocalPlayer
 
-local function notify()
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = "EXECUTIONER",
-            Text = "Script activado 💀",
-            Duration = 3
-        })
-    end)
-end
+-- 🔔 NOTIFICACIÓN
+pcall(function()
+    StarterGui:SetCore("SendNotification", {
+        Title = "EXECUTIONER",
+        Text = "Activado 💀",
+        Duration = 3
+    })
+end)
 
-local function startExecutioner()
-    local char = LocalPlayer.Character
-    if not char then return end
-    
-    local Root = char:WaitForChild("HumanoidRootPart")
-    local Humanoid = char:WaitForChild("Humanoid")
-    
-    local IsActive = true
-    
-    local FlingConnection
-    FlingConnection = RunService.Heartbeat:Connect(function()
-        if not IsActive or Humanoid.Health <= 0 or not char.Parent then
-            IsActive = false
-            if FlingConnection then FlingConnection:Disconnect() end
-            print("💀 EXECUTIONER DETENIDO")
-            return
+local Character, Humanoid, HRP
+local AntiEnabled = true
+
+-- ⚙️ CONFIG
+local POWER = 1200
+local UP = 7000
+
+local function Setup(char)
+    Character = char
+    Humanoid = char:WaitForChild("Humanoid")
+    HRP = char:WaitForChild("HumanoidRootPart")
+
+    HRP.CustomPhysicalProperties = PhysicalProperties.new(1,0.3,0.5)
+
+    -- 🟢 INMORTALIDAD BÁSICA
+    task.spawn(function()
+        while Humanoid and Humanoid.Parent do
+            if Humanoid.Health < Humanoid.MaxHealth then
+                Humanoid.Health = Humanoid.MaxHealth
+            end
+            task.wait()
         end
-        
-        -- 💥 MÉTODO REAL (igual al OMNI)
-        local oldVel = Root.AssemblyLinearVelocity
-        
-        Root.AssemblyLinearVelocity =
-            oldVel * 800 + Vector3.new(0, 6000, 0)
-        
-        RunService.RenderStepped:Wait()
-        
-        Root.AssemblyLinearVelocity = oldVel
     end)
-
-    notify()
-    print("💀 EXECUTIONER V12 ACTIVO")
 end
 
-if LocalPlayer.Character then
-    startExecutioner()
+Player.CharacterAdded:Connect(function(c)
+    task.wait(0.3)
+    Setup(c)
+end)
+
+if Player.Character then
+    Setup(Player.Character)
 end
+
+-- 🧠 ANTI-FLING CONTROLADO
+RunService.Heartbeat:Connect(function()
+    if not HRP then return end
+    
+    if AntiEnabled then
+        if HRP.AssemblyLinearVelocity.Magnitude > 150 then
+            HRP.AssemblyLinearVelocity = Vector3.zero
+            HRP.AssemblyAngularVelocity = Vector3.zero
+        end
+    end
+end)
+
+-- 💥 FLING REAL (CON VENTANA)
+RunService.Heartbeat:Connect(function()
+    if not HRP or not Humanoid or Humanoid.Health <= 0 then return end
+    
+    -- 🔓 DESACTIVAR ANTI MOMENTÁNEAMENTE
+    AntiEnabled = false
+
+    local oldVel = HRP.AssemblyLinearVelocity
+
+    -- 💣 IMPULSO FUERTE
+    HRP.AssemblyLinearVelocity =
+        oldVel * POWER + Vector3.new(0, UP, 0)
+
+    -- ⏱ MICRO VENTANA
+    RunService.RenderStepped:Wait()
+
+    -- 🔒 RESTAURAR
+    HRP.AssemblyLinearVelocity = oldVel
+    HRP.AssemblyAngularVelocity = Vector3.zero
+
+    AntiEnabled = true
+end)
