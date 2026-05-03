@@ -7,9 +7,9 @@ local lp = Players.LocalPlayer
 local PlayerGui = lp:WaitForChild("PlayerGui")
 
 -- CONFIG
-local DODGE_DISTANCE = 20
-local VOID_TIME = 5
-local SAFE_HEIGHT = 10
+local DODGE_DISTANCE = 5
+local VOID_TIME = 3
+local SAFE_HEIGHT = 8
 local DISASTER_KEYWORDS = {"Lava", "Meteor", "Lightning", "Acid", "Spike", "Fire"} -- nombres comunes
 
 local isDodging = false
