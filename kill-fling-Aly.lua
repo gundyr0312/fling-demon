@@ -11,13 +11,16 @@ local BASE_SEPARATION = 5
 local MAX_DODGE = 100
 local SAFE_HEIGHT = 3
 local FAST_PART_VELOCITY = 80
+local VOID_TIME = 3
+local DISASTER_KEYWORDS = {"Lava", "Meteor", "Lightning", "Acid", "Spike", "Fire", "Rock"}
 
 -- ESTADO
 local lastTP = 0
 local lastDangerCheck = 0
+local lastPredictionCheck = 0 -- NUEVO: cooldown predicción
 local lastTouchTime = 0
 local touchCount = 0
-local currentAttacker = nil -- NUEVO: trackea quién te está spameando
+local currentAttacker = nil
 
 local hitTracker = {}
 local lastTouchPerPlayer = {}
@@ -35,68 +38,88 @@ local function NotifyActivation()
 		ScreenGui.Parent = PlayerGui
 		
 		local Frame = Instance.new("Frame", ScreenGui)
-	Frame.Size = UDim2.new(0, 420, 0, 55)
-	Frame.Position = UDim2.new(1, 430, 1, -65)
-	Frame.AnchorPoint = Vector2.new(0, 1)
-	Frame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
-	Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 10)
+		Frame.Size = UDim2.new(0, 450, 0, 55)
+		Frame.Position = UDim2.new(1, 460, 1, -65)
+		Frame.AnchorPoint = Vector2.new(0, 1)
+		Frame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+		Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 10)
 		
 		local Stroke = Instance.new("UIStroke", Frame)
-	Stroke.Color = Color3.fromRGB(0, 150, 255)
-	Stroke.Thickness = 2
+		Stroke.Color = Color3.fromRGB(0, 150, 255)
+		Stroke.Thickness = 2
 		
 		local Text = Instance.new("TextLabel", Frame)
 		Text.Size = UDim2.new(1, -20, 1, 0)
 		Text.Position = UDim2.new(0, 10, 0, 0)
 		Text.BackgroundTransparency = 1
-		Text.Text = "🛡️ AUTO-DODGE V8 | FIXED"
+		Text.Text = "🛡️ AUTO-DODGE V10 | PREDICCIÓN DESASTRES"
 		Text.TextColor3 = Color3.fromRGB(0, 200, 255)
 		Text.Font = Enum.Font.GothamBold
 		Text.TextSize = 14
 		Text.TextXAlignment = Enum.TextXAlignment.Left
 		
-		TweenService:Create(Frame, TweenInfo.new(0.4, Enum.EasingStyle.Back), {Position = UDim2.new(1, -430, 1, -10)}):Play()
+		TweenService:Create(Frame, TweenInfo.new(0.4, Enum.EasingStyle.Back), {Position = UDim2.new(1, -460, 1, -10)}):Play()
 		task.wait(3.5)
-		TweenService:Create(Frame, TweenInfo.new(0.3), {Position = UDim2.new(1, 430, 1, -65)}):Play()
+		TweenService:Create(Frame, TweenInfo.new(0.3), {Position = UDim2.new(1, 460, 1, -65)}):Play()
 		task.wait(0.3)
-	ScreenGui:Destroy()
+		ScreenGui:Destroy()
 	end)
 end
 
--- VOID CONTROLADO
+-- FUNCIÓN SEGURA PARA MOVER
+local function SafeTeleport(HRP, targetPos)
+	local ray = Workspace:Raycast(
+		targetPos + Vector3.new(0,50,0),
+		Vector3.new(0,-200,0),
+		raycastParams
+	)
+	if ray and ray.Instance and ray.Instance.CanCollide then
+		HRP.CFrame = CFrame.new(ray.Position + Vector3.new(0, SAFE_HEIGHT, 0))
+		return true
+	end
+	return false
+end
+
+-- VOID CON REGRESO
 local function VoidPlayer(attackerHRP, attackerPlr)
 	if not attackerHRP or not attackerHRP.Parent then return end
 	if not attackerPlr then return end
 	
-	if tick() - (voidCooldown[attackerPlr] or 0) < 1 then return end
+	if tick() - (voidCooldown[attackerPlr] or 0) < 2 then return end
 	voidCooldown[attackerPlr] = tick()
 
+	local originalCF = attackerHRP.CFrame
 	attackerHRP.AssemblyLinearVelocity = Vector3.new(0, -500, 0)
 	attackerHRP.CFrame = attackerHRP.CFrame - Vector3.new(0, 150, 0)
+	
+	task.delay(VOID_TIME, function()
+		if attackerHRP and attackerHRP.Parent then
+			attackerHRP.CFrame = originalCF + Vector3.new(0, 5, 0)
+			attackerHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+		end
+	end)
 end
 
--- CHECK FOCUS FIXEADO
+-- CHECK FOCUS: 5 TOQUES EN 10S
 local function CheckFocus(attackerHRP, attackerPlr)
 	if not attackerPlr then return end
 	
 	hitTracker[attackerPlr] = hitTracker[attackerPlr] or {}
 	table.insert(hitTracker[attackerPlr], tick())
 
-	-- Limpia hits viejos >8s
 	for i = #hitTracker[attackerPlr], 1, -1 do
-		if tick() - hitTracker[attackerPlr][i] > 8 then
+		if tick() - hitTracker[attackerPlr][i] > 10 then
 			table.remove(hitTracker[attackerPlr], i)
 		end
 	end
 
-	-- 5 toques = void
 	if #hitTracker[attackerPlr] >= 5 then
-	hitTracker[attackerPlr] = {}
+		hitTracker[attackerPlr] = {}
 		VoidPlayer(attackerHRP, attackerPlr)
 	end
 end
 
--- DODGE FIXEADO
+-- DODGE SOLO POR CONTACTO
 local function DodgeTouch(attackerChar)
 	if tick() - lastTP < 0.05 then return end
 	lastTP = tick()
@@ -109,7 +132,6 @@ local function DodgeTouch(attackerChar)
 	
 	local now = tick()
 	
-	-- FIX 2: Si es el mismo atacante, escala. Si es otro, resetea
 	if now - lastTouchTime < 3 and attackerPlr == currentAttacker then
 		touchCount += 1
 	else
@@ -120,30 +142,15 @@ local function DodgeTouch(attackerChar)
 	
 	local currentSeparation = math.min(BASE_SEPARATION * (2 ^ (touchCount - 1)), MAX_DODGE)
 
-	-- Predicción coherente
 	local predictedPos = attackerHRP.Position + attackerHRP.AssemblyLinearVelocity * 0.1
 	local dir = HRP.Position - predictedPos
 	dir = dir.Magnitude > 0 and dir.Unit or Vector3.new(1,0,0)
 
 	local exactPos = predictedPos + dir * currentSeparation
 
-	-- FIX 1: Raycast con validación real de suelo
-	local ray = Workspace:Raycast(
-		exactPos + Vector3.new(0,30,0), -- 30 studs arriba para más margen
-		Vector3.new(0,-150,0), -- 150 studs abajo para no perder suelo
-	raycastParams
-	)
-
-	if ray and ray.Instance and ray.Instance.CanCollide then
-	HRP.CFrame = CFrame.new(ray.Position + Vector3.new(0, SAFE_HEIGHT, 0))
-	else
-	-- FIX 1: Fallback seguro, no al vacío
-		local fallback = HRP.Position + dir * 15 -- 15 studs hacia atrás, nunca al vacío
-		local fallbackRay = Workspace:Raycast(fallback + Vector3.new(0,30,0), Vector3.new(0,-150,0), raycastParams)
-		if fallbackRay and fallbackRay.Instance and fallbackRay.Instance.CanCollide then
-			HRP.CFrame = CFrame.new(fallbackRay.Position + Vector3.new(0, SAFE_HEIGHT, 0))
-		else
-			-- Último recurso: 20 studs arriba
+	if not SafeTeleport(HRP, exactPos) then
+		local fallback = HRP.Position + dir * 15
+		if not SafeTeleport(HRP, fallback) then
 			HRP.CFrame = CFrame.new(HRP.Position + Vector3.new(0, 20, 0))
 		end
 	end
@@ -165,39 +172,59 @@ local function SetupDodge(char)
 				local attackerPlr = attackerChar and Players:GetPlayerFromCharacter(attackerChar)
 
 				if attackerPlr and attackerPlr ~= lp then
-					if tick() - (lastTouchPerPlayer[attackerPlr] or 0) < 0.15 then return end -- 0.15s en vez de 0.2
+					if tick() - (lastTouchPerPlayer[attackerPlr] or 0) < 0.15 then return end
 					lastTouchPerPlayer[attackerPlr] = tick()
-
 					DodgeTouch(attackerChar)
 				end
 			end)
 		end
 	end
 
+	-- ÚNICO HEARTBEAT
 	RunService.Heartbeat:Connect(function()
 		if not HRP.Parent then return end
 
-	-- PRE-DODGE
-		for _, plr in pairs(Players:GetPlayers()) do
-			if plr ~= lp and plr.Character then
-				local oHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-				if oHRP then
-					if (oHRP.Position - HRP.Position).Magnitude < 6 then
-						DodgeTouch(plr.Character)
-						return
+		-- PREDICCIÓN DE DESASTRES NUEVO
+		if tick() - lastPredictionCheck >= 0.2 then -- cada 0.2s
+			lastPredictionCheck = tick()
+			
+			for _, part in pairs(Workspace:GetChildren()) do
+				if part:IsA("BasePart") and not part.Anchored then
+					-- Detecta si es desastre por nombre o velocidad
+					local isDisaster = false
+					for _, keyword in pairs(DISASTER_KEYWORDS) do
+						if part.Name:lower():find(keyword:lower()) then
+							isDisaster = true
+							break
+						end
+					end
+					
+					if isDisaster and part.AssemblyLinearVelocity.Y < -30 then
+						-- Predice dónde va a caer en 1.5 segundos
+						local gravity = 196.2
+						local timeToImpact = 1.5
+						local futurePos = part.Position + part.AssemblyLinearVelocity * timeToImpact + Vector3.new(0, -0.5 * gravity * timeToImpact^2, 0)
+						
+						-- Si va a caer a menos de 18 studs de ti
+						if (futurePos - HRP.Position).Magnitude < 18 then
+							local escapeDir = (HRP.Position - futurePos).Unit
+							if escapeDir.Magnitude == 0 then escapeDir = Vector3.new(1,0,0) end
+							local escapePos = HRP.Position + escapeDir * 40
+							
+							if SafeTeleport(HRP, escapePos) then
+								return
+							end
+						end
 					end
 				end
 			end
 		end
 
-	-- ANTI-PARTES
+		-- ANTI-PARTES RÁPIDAS VIEJO
 		if tick() - lastDangerCheck < 0.1 then return end
 		lastDangerCheck = tick()
 
-		for _, part in pairs(Workspace:GetPartBoundsInBox(
-			HRP.CFrame,
-			Vector3.new(50,25,50)
-	)) do
+		for _, part in pairs(Workspace:GetPartBoundsInBox(HRP.CFrame, Vector3.new(50,25,50))) do
 			if not part.Anchored and not Players:GetPlayerFromCharacter(part.Parent) then
 				if part.AssemblyLinearVelocity.Magnitude > FAST_PART_VELOCITY then
 					local dist = (part.Position - HRP.Position).Magnitude
