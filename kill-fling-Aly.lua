@@ -5,7 +5,6 @@ local TweenService = game:GetService("TweenService")
 
 local lp = Players.LocalPlayer
 local PlayerGui = lp:WaitForChild("PlayerGui")
-
 -- CONFIG
 local BASE_SEPARATION = 5
 local MAX_DODGE = 100
