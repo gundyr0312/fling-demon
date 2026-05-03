@@ -7,10 +7,10 @@ local lp = Players.LocalPlayer
 local PlayerGui = lp:WaitForChild("PlayerGui")
 
 -- CONFIG
-local DODGE_DISTANCE = 5 -- cambiado de 20 a 5
-local VOID_TIME = 5
+local DODGE_DISTANCE = 5
+local VOID_TIME = 2
 local SAFE_HEIGHT = 10
-local FAST_PART_VELOCITY = 80 -- velocidad mínima para considerar pieza peligrosa
+local FAST_PART_VELOCITY = 50 -- velocidad mínima para considerar pieza peligrosa
 local DISASTER_KEYWORDS = {"Lava", "Meteor", "Lightning", "Acid", "Spike", "Fire"}
 
 local isDodging = false
