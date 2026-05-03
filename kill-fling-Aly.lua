@@ -12,12 +12,13 @@ local MAX_DODGE = 100
 local SAFE_HEIGHT = 3
 local FAST_PART_VELOCITY = 80
 local VOID_TIME = 3
-local DISASTER_KEYWORDS = {"Lava", "Meteor", "Lightning", "Acid", "Spike", "Fire", "Rock"}
+local DISASTER_KEYWORDS = {"Lava", "Meteor", "Lightning", "Acid", "Spike", "Fire", "Rock", "Boulder"}
 
 -- ESTADO
 local lastTP = 0
 local lastDangerCheck = 0
-local lastPredictionCheck = 0 -- NUEVO: cooldown predicción
+local lastPredictionCheck = 0
+local lastDisasterDodge = 0 -- NUEVO: cooldown anti-spam desastres
 local lastTouchTime = 0
 local touchCount = 0
 local currentAttacker = nil
@@ -52,7 +53,7 @@ local function NotifyActivation()
 		Text.Size = UDim2.new(1, -20, 1, 0)
 		Text.Position = UDim2.new(0, 10, 0, 0)
 		Text.BackgroundTransparency = 1
-		Text.Text = "🛡️ AUTO-DODGE V10 | PREDICCIÓN DESASTRES"
+		Text.Text = "🛡️ AUTO-DODGE V11 | FIX INFINITE TP"
 		Text.TextColor3 = Color3.fromRGB(0, 200, 255)
 		Text.Font = Enum.Font.GothamBold
 		Text.TextSize = 14
@@ -66,8 +67,18 @@ local function NotifyActivation()
 	end)
 end
 
+-- VERIFICA SI YA ESTÁS SEGURO
+local function IsSafeSpot(pos, disasterPos)
+	if (pos - disasterPos).Magnitude > 25 then return true end -- ya estás lejos
+	return false
+end
+
 -- FUNCIÓN SEGURA PARA MOVER
 local function SafeTeleport(HRP, targetPos)
+	-- FIX: No teletransportar si ya estás en el aire sin suelo
+	local groundCheck = Workspace:Raycast(HRP.Position, Vector3.new(0,-10,0), raycastParams)
+	if not groundCheck then return false end -- no te muevas si ya estás flotando
+	
 	local ray = Workspace:Raycast(
 		targetPos + Vector3.new(0,50,0),
 		Vector3.new(0,-200,0),
@@ -151,7 +162,11 @@ local function DodgeTouch(attackerChar)
 	if not SafeTeleport(HRP, exactPos) then
 		local fallback = HRP.Position + dir * 15
 		if not SafeTeleport(HRP, fallback) then
-			HRP.CFrame = CFrame.new(HRP.Position + Vector3.new(0, 20, 0))
+			-- FIX: Solo sube 20 si hay suelo abajo, sino no hagas nada
+			local groundCheck = Workspace:Raycast(HRP.Position, Vector3.new(0,-10,0), raycastParams)
+			if groundCheck then
+				HRP.CFrame = CFrame.new(HRP.Position + Vector3.new(0, 20, 0))
+			end
 		end
 	end
 
@@ -184,13 +199,12 @@ local function SetupDodge(char)
 	RunService.Heartbeat:Connect(function()
 		if not HRP.Parent then return end
 
-		-- PREDICCIÓN DE DESASTRES NUEVO
-		if tick() - lastPredictionCheck >= 0.2 then -- cada 0.2s
+		-- PREDICCIÓN DE DESASTRES CON COOLDOWN ANTI-SPAM
+		if tick() - lastPredictionCheck >= 0.3 then -- 0.3s en vez de 0.2
 			lastPredictionCheck = tick()
 			
 			for _, part in pairs(Workspace:GetChildren()) do
 				if part:IsA("BasePart") and not part.Anchored then
-					-- Detecta si es desastre por nombre o velocidad
 					local isDisaster = false
 					for _, keyword in pairs(DISASTER_KEYWORDS) do
 						if part.Name:lower():find(keyword:lower()) then
@@ -200,19 +214,23 @@ local function SetupDodge(char)
 					end
 					
 					if isDisaster and part.AssemblyLinearVelocity.Y < -30 then
-						-- Predice dónde va a caer en 1.5 segundos
 						local gravity = 196.2
-						local timeToImpact = 1.5
+						local timeToImpact = 1.2 -- reduje a 1.2s para menos falsos positivos
 						local futurePos = part.Position + part.AssemblyLinearVelocity * timeToImpact + Vector3.new(0, -0.5 * gravity * timeToImpact^2, 0)
 						
-						-- Si va a caer a menos de 18 studs de ti
-						if (futurePos - HRP.Position).Magnitude < 18 then
-							local escapeDir = (HRP.Position - futurePos).Unit
-							if escapeDir.Magnitude == 0 then escapeDir = Vector3.new(1,0,0) end
-							local escapePos = HRP.Position + escapeDir * 40
-							
-							if SafeTeleport(HRP, escapePos) then
-								return
+						-- FIX: Solo esquiva si va a caer cerca Y no has esquivado en 0.8s
+						if (futurePos - HRP.Position).Magnitude < 20 and tick() - lastDisasterDodge > 0.8 then
+							-- FIX: Verifica que no estés ya seguro
+							if not IsSafeSpot(HRP.Position, futurePos) then
+								lastDisasterDodge = tick() -- marca cooldown
+								
+								local escapeDir = (HRP.Position - futurePos).Unit
+								if escapeDir.Magnitude == 0 then escapeDir = Vector3.new(1,0,0) end
+								local escapePos = HRP.Position + escapeDir * 35 -- 35 en vez de 40
+								
+								if SafeTeleport(HRP, escapePos) then
+									return
+								end
 							end
 						end
 					end
@@ -220,7 +238,7 @@ local function SetupDodge(char)
 			end
 		end
 
-		-- ANTI-PARTES RÁPIDAS VIEJO
+		-- ANTI-PARTES RÁPIDAS
 		if tick() - lastDangerCheck < 0.1 then return end
 		lastDangerCheck = tick()
 
@@ -228,8 +246,13 @@ local function SetupDodge(char)
 			if not part.Anchored and not Players:GetPlayerFromCharacter(part.Parent) then
 				if part.AssemblyLinearVelocity.Magnitude > FAST_PART_VELOCITY then
 					local dist = (part.Position - HRP.Position).Magnitude
-					if dist < 25 then
-						HRP.CFrame = HRP.CFrame + Vector3.new(0, 50, 0)
+					if dist < 25 and tick() - lastDisasterDodge > 0.8 then -- mismo cooldown
+						lastDisasterDodge = tick()
+						-- FIX: Solo sube si hay suelo
+						local groundCheck = Workspace:Raycast(HRP.Position, Vector3.new(0,-10,0), raycastParams)
+						if groundCheck then
+							HRP.CFrame = HRP.CFrame + Vector3.new(0, 40, 0) -- 40 en vez de 50
+						end
 						return
 					end
 				end
