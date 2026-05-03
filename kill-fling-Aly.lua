@@ -10,29 +10,36 @@ local MAX_DODGE = 100
 local SAFE_HEIGHT = 3
 local FAST_PART_VELOCITY = 80
 
+-- ESTADO
 local lastTP = 0
 local lastDangerCheck = 0
 local lastTouchTime = 0
 local touchCount = 0
+
 local hitTracker = {}
 local lastTouchPerPlayer = {}
+local voidCooldown = {}
 
 local raycastParams = RaycastParams.new()
 raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
 
--- ==============================
--- 🔴 VOID MEJORADO
--- ==============================
-local function VoidPlayer(attackerHRP)
-	if attackerHRP and attackerHRP.Parent then
-		attackerHRP.AssemblyLinearVelocity = Vector3.new(0, -500, 0)
-		attackerHRP.CFrame = attackerHRP.CFrame - Vector3.new(0, 150, 0)
-	end
+-- =========================
+-- 💀 VOID CONTROLADO
+-- =========================
+local function VoidPlayer(attackerHRP, attackerPlr)
+	if not attackerHRP or not attackerHRP.Parent then return end
+	if not attackerPlr then return end
+	
+	if tick() - (voidCooldown[attackerPlr] or 0) < 1 then return end
+	voidCooldown[attackerPlr] = tick()
+
+	attackerHRP.AssemblyLinearVelocity = Vector3.new(0, -500, 0)
+	attackerHRP.CFrame = attackerHRP.CFrame - Vector3.new(0, 150, 0)
 end
 
--- ==============================
+-- =========================
 -- 🎯 CHECK FOCUS
--- ==============================
+-- =========================
 local function CheckFocus(attackerHRP, attackerPlr)
 	if not attackerPlr then return end
 	
@@ -47,13 +54,13 @@ local function CheckFocus(attackerHRP, attackerPlr)
 
 	if #hitTracker[attackerPlr] >= 5 then
 		hitTracker[attackerPlr] = {}
-		VoidPlayer(attackerHRP)
+		VoidPlayer(attackerHRP, attackerPlr)
 	end
 end
 
--- ==============================
+-- =========================
 -- ⚡ DODGE
--- ==============================
+-- =========================
 local function DodgeTouch(attackerChar)
 	if tick() - lastTP < 0.05 then return end
 	lastTP = tick()
@@ -64,7 +71,7 @@ local function DodgeTouch(attackerChar)
 	local attackerPlr = attackerChar and Players:GetPlayerFromCharacter(attackerChar)
 	if not HRP or not attackerHRP then return end
 	
-	-- 📈 Escalado real
+	-- 📈 Escalado
 	local now = tick()
 	if now - lastTouchTime < 3 then
 		touchCount += 1
@@ -82,7 +89,7 @@ local function DodgeTouch(attackerChar)
 
 	local exactPos = predictedPos + dir * currentSeparation
 
-	-- 📡 Raycast mejorado
+	-- 📡 Raycast largo
 	local ray = Workspace:Raycast(
 		exactPos + Vector3.new(0,20,0),
 		Vector3.new(0,-100,0),
@@ -92,7 +99,7 @@ local function DodgeTouch(attackerChar)
 	if ray then
 		HRP.CFrame = CFrame.new(ray.Position + Vector3.new(0, SAFE_HEIGHT, 0))
 	else
-		-- fallback cercano (NO random)
+		-- fallback cercano
 		local fallback = HRP.Position + dir * 10
 		HRP.CFrame = CFrame.new(fallback)
 	end
@@ -100,9 +107,9 @@ local function DodgeTouch(attackerChar)
 	CheckFocus(attackerHRP, attackerPlr)
 end
 
--- ==============================
+-- =========================
 -- 🛡️ SETUP
--- ==============================
+-- =========================
 local function SetupDodge(char)
 	local HRP = char:WaitForChild("HumanoidRootPart")
 	raycastParams.FilterDescendantsInstances = {char}
@@ -124,26 +131,24 @@ local function SetupDodge(char)
 		end
 	end
 
-	-- 🧠 PRE-DODGE (ANTES DEL CONTACTO)
+	-- 🧠 ÚNICO HEARTBEAT (optimizado)
 	RunService.Heartbeat:Connect(function()
 		if not HRP.Parent then return end
-		
+
+		-- PRE-DODGE
 		for _, plr in pairs(Players:GetPlayers()) do
 			if plr ~= lp and plr.Character then
 				local oHRP = plr.Character:FindFirstChild("HumanoidRootPart")
 				if oHRP then
-					local dist = (oHRP.Position - HRP.Position).Magnitude
-					if dist < 6 then
+					if (oHRP.Position - HRP.Position).Magnitude < 6 then
 						DodgeTouch(plr.Character)
+						return
 					end
 				end
 			end
 		end
-	end)
 
-	-- 🌪️ ANTI-PARTES RÁPIDAS
-	RunService.Heartbeat:Connect(function()
-		if not HRP.Parent then return end
+		-- ANTI-PARTES
 		if tick() - lastDangerCheck < 0.1 then return end
 		lastDangerCheck = tick()
 
