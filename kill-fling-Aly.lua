@@ -7,10 +7,11 @@ local lp = Players.LocalPlayer
 local PlayerGui = lp:WaitForChild("PlayerGui")
 
 -- CONFIG
-local DODGE_DISTANCE = 5
-local VOID_TIME = 3
-local SAFE_HEIGHT = 8
-local DISASTER_KEYWORDS = {"Lava", "Meteor", "Lightning", "Acid", "Spike", "Fire"} -- nombres comunes
+local DODGE_DISTANCE = 5 -- cambiado de 20 a 5
+local VOID_TIME = 5
+local SAFE_HEIGHT = 10
+local FAST_PART_VELOCITY = 80 -- velocidad mínima para considerar pieza peligrosa
+local DISASTER_KEYWORDS = {"Lava", "Meteor", "Lightning", "Acid", "Spike", "Fire"}
 
 local isDodging = false
 local lastFocusAttacker = nil
@@ -23,8 +24,8 @@ task.spawn(function()
 	ScreenGui.ResetOnSpawn = false
 	ScreenGui.Parent = PlayerGui
 	local Frame = Instance.new("Frame", ScreenGui)
-	Frame.Size = UDim2.new(0, 300, 0, 50)
-	Frame.Position = UDim2.new(1, 310, 1, -60)
+	Frame.Size = UDim2.new(0, 320, 0, 50)
+	Frame.Position = UDim2.new(1, 330, 1, -60)
 	Frame.AnchorPoint = Vector2.new(0, 1)
 	Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 	Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 8)
@@ -32,20 +33,19 @@ task.spawn(function()
 	Text.Size = UDim2.new(1, -10, 1, 0)
 	Text.Position = UDim2.new(0, 5, 0, 0)
 	Text.BackgroundTransparency = 1
-	Text.Text = "🛡️ AUTO-DODGE ACTIVO | ANTI-FOCUS + ANTI-DISASTER"
+	Text.Text = "🛡️ AUTO-DODGE V2 | 5 STUDS + ANTI FLYING PARTS"
 	Text.TextColor3 = Color3.fromRGB(0, 200, 255)
 	Text.Font = Enum.Font.GothamBold
 	Text.TextSize = 13
-	TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Position = UDim2.new(1, -310, 1, -10)}):Play()
+	TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Position = UDim2.new(1, -330, 1, -10)}):Play()
 	task.wait(3)
-	TweenService:Create(Frame, TweenInfo.new(0.3), {Position = UDim2.new(1, 310, 1, -60)}):Play()
+	TweenService:Create(Frame, TweenInfo.new(0.3), {Position = UDim2.new(1, 330, 1, -60)}):Play()
 	task.wait(0.3)
 	ScreenGui:Destroy()
 end)
 
 local function FindSafeSpot(origin)
-	-- Busca un punto sólido en el mapa, no en el aire
-	for i = 1, 36 do -- busca en círculo
+	for i = 1, 36 do
 		local angle = math.rad(i * 10)
 		local offset = Vector3.new(math.cos(angle) * 50, 0, math.sin(angle) * 50)
 		local rayOrigin = origin + offset + Vector3.new(0, 100, 0)
@@ -53,7 +53,6 @@ local function FindSafeSpot(origin)
 		
 		if rayResult and rayResult.Instance.CanCollide then
 			local safePos = rayResult.Position + Vector3.new(0, SAFE_HEIGHT, 0)
-			-- Verifica que no sea lava/daño
 			local safe = true
 			for _, keyword in pairs(DISASTER_KEYWORDS) do
 				if rayResult.Instance.Name:lower():find(keyword:lower()) then
@@ -66,7 +65,12 @@ local function FindSafeSpot(origin)
 			end
 		end
 	end
-	return origin + Vector3.new(0, 20, 0) -- fallback: 20 studs arriba
+	return origin + Vector3.new(0, 20, 0)
+end
+
+local function IsInLobby(pos)
+	-- Si estás muy alto o muy bajo = lobby. Ajusta estos valores a tu juego
+	return pos.Y > 500 or pos.Y < -1000
 end
 
 local function TeleportToVoidAndCounter(attackerHRP)
@@ -79,11 +83,8 @@ local function TeleportToVoidAndCounter(attackerHRP)
 	
 	local originalPos = HRP.CFrame
 	lastFocusAttacker = attackerHRP
-	
-	-- 1. Void instantáneo
 	HRP.CFrame = CFrame.new(0, -50000, 0)
 	
-	-- 2. Espera 5s y sube a matar al que hizo focus
 	task.delay(VOID_TIME, function()
 		if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then 
 			isDodging = false 
@@ -92,12 +93,9 @@ local function TeleportToVoidAndCounter(attackerHRP)
 		
 		local newHRP = lp.Character.HumanoidRootPart
 		if attackerHRP and attackerHRP.Parent then
-			-- Aparece 5 studs arriba del atacante
 			newHRP.CFrame = attackerHRP.CFrame + Vector3.new(0, 5, 0)
-			-- Le mete velocidad hacia abajo para matarlo
 			newHRP.AssemblyLinearVelocity = Vector3.new(0, -5000, 0)
 		else
-			-- Si el atacante murió, vuelve a punto seguro
 			newHRP.CFrame = CFrame.new(FindSafeSpot(originalPos.Position))
 		end
 		isDodging = false
@@ -113,7 +111,6 @@ local function DodgeTouch(attackerChar)
 	local attackerHRP = attackerChar and attackerChar:FindFirstChild("HumanoidRootPart")
 	if not HRP or not attackerHRP then isDodging = false return end
 	
-	-- Calcula dirección opuesta al atacante
 	local dir = (HRP.Position - attackerHRP.Position).Unit
 	if dir.Magnitude == 0 then dir = Vector3.new(1, 0, 0) end
 	
@@ -131,7 +128,7 @@ local function SetupDodge(char)
 	
 	raycastParams.FilterDescendantsInstances = {char}
 	
-	-- 1. ANTI-TOQUE: si alguien te toca, te mueves 20 studs
+	-- 1. ANTI-TOQUE: 5 studs
 	for _, part in pairs(char:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.Touched:Connect(function(hit)
@@ -146,17 +143,34 @@ local function SetupDodge(char)
 		end
 	end
 	
-	-- 2. ANTI-DESASTRE: detecta lava/meteoros cayendo cerca
+	-- 2. ANTI-DESASTRE + ANTI PIEZAS VOLADORAS RÁPIDAS
 	RunService.Heartbeat:Connect(function()
 		if isDodging or not HRP or not HRP.Parent then return end
 		
-		-- Busca partes con nombres de desastre a menos de 30 studs arriba
+		-- Desastres cayendo
 		for _, part in pairs(Workspace:GetPartBoundsInBox(HRP.CFrame + Vector3.new(0, 15, 0), Vector3.new(60, 30, 60))) do
 			for _, keyword in pairs(DISASTER_KEYWORDS) do
 				if part.Name:lower():find(keyword:lower()) or part.Parent.Name:lower():find(keyword:lower()) then
-					if part.AssemblyLinearVelocity.Y < -20 then -- está cayendo
+					if part.AssemblyLinearVelocity.Y < -20 then
 						local safePos = FindSafeSpot(HRP.Position)
 						HRP.CFrame = CFrame.new(safePos)
+						return
+					end
+				end
+			end
+			
+			-- NUEVO: Piezas voladoras del mapa a alta velocidad
+			if not part.Anchored and not Players:GetPlayerFromCharacter(part.Parent) then
+				if part.AssemblyLinearVelocity.Magnitude > FAST_PART_VELOCITY then
+					local dist = (part.Position - HRP.Position).Magnitude
+					if dist < 25 then -- si está a menos de 25 studs y viene rápido
+						if IsInLobby(HRP.Position) then
+							-- Estás en lobby -> ve al mapa
+							HRP.CFrame = CFrame.new(FindSafeSpot(Vector3.new(0, 10, 0)))
+						else
+							-- Estás en mapa -> ve al lobby
+							HRP.CFrame = CFrame.new(0, 1000, 0) -- ajusta esta altura a tu lobby
+						end
 						return
 					end
 				end
@@ -164,7 +178,7 @@ local function SetupDodge(char)
 		end
 	end)
 	
-	-- 3. ANTI-FOCUS: si te hacen mucho daño rápido = focus
+	-- 3. ANTI-FOCUS
 	local lastHealth = Humanoid.Health
 	local damageTime = 0
 	local damageAmount = 0
@@ -174,11 +188,10 @@ local function SetupDodge(char)
 			local dmg = lastHealth - newHealth
 			if tick() - damageTime < 1 then
 				damageAmount = damageAmount + dmg
-				if damageAmount > 30 then -- 30+ daño en 1s = focus
-					-- Busca al player más cercano como atacante
+				if damageAmount > 30 then
 					local closest, closestDist = nil, 50
 					for _, plr in pairs(Players:GetPlayers()) do
-						if plr ~= lp and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+						if plr ~= lp and plr.Character:FindFirstChild("HumanoidRootPart") then
 							local dist = (HRP.Position - plr.Character.HumanoidRootPart.Position).Magnitude
 							if dist < closestDist then
 								closest = plr.Character.HumanoidRootPart
