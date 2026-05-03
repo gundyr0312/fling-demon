@@ -1,129 +1,95 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
-local PhysicsService = game:GetService("PhysicsService")
 
 local lp = Players.LocalPlayer
 local PlayerGui = lp:WaitForChild("PlayerGui")
+local flingPower = 55000
 
-local hiddenfling = true
-local flingPower = 55000 -- máximo del slider original
-
--- ESPERA A QUE EL OTRO SCRIPT MONTE SUS BLOQUEOS Y LUEGO LOS ROMPE
-task.delay(11, function()
-	-- 1. Mata los HeartbeatLoops que ponen Velocity = 0 a otros
-	for _, v in pairs(getconnections(RunService.Heartbeat)) do
-		local s = tostring(v.Function)
-		if s:find("RotVelocity") or s:find("Velocity = Vector3.new(0,0,0)") or s:find("CanCollide = false") then
-			pcall(function() v:Disable() end)
-		end
-	end
-end)
-
-if not ReplicatedStorage:FindFirstChild("juisdfj0i32i0eidsuf0iok") then
-	local detection = Instance.new("Decal")
-	detection.Name = "juisdfj0i32i0eidsuf0iok"
-	detection.Parent = ReplicatedStorage
-end
-
--- Mensajito de 3 segundos
+-- Mensajito
 task.spawn(function()
 	local ScreenGui = Instance.new("ScreenGui")
-	ScreenGui.Name = "FlingNotif"
 	ScreenGui.ResetOnSpawn = false
-	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	ScreenGui.Parent = PlayerGui
-
 	local Frame = Instance.new("Frame", ScreenGui)
-	Frame.Size = UDim2.new(0, 280, 0, 50)
-	Frame.Position = UDim2.new(1, 300, 1, -60)
+	Frame.Size = UDim2.new(0, 320, 0, 50)
+	Frame.Position = UDim2.new(1, 340, 1, -60)
 	Frame.AnchorPoint = Vector2.new(0, 1)
 	Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-	Frame.BackgroundTransparency = 0.1
-	Frame.BorderSizePixel = 0
 	Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 8)
-
-	local UIStroke = Instance.new("UIStroke", Frame)
-	UIStroke.Color = Color3.fromRGB(255, 0, 0)
-	UIStroke.Thickness = 2
-
 	local Text = Instance.new("TextLabel", Frame)
 	Text.Size = UDim2.new(1, -10, 1, 0)
 	Text.Position = UDim2.new(0, 5, 0, 0)
 	Text.BackgroundTransparency = 1
-	Text.Text = "FLING ACTIVO | POWER: 55000 | ANTI-FLING BYPASS"
+	Text.Text = "FLING V2 ACTIVO | POWER: 55000 | COLLISION BYPASS"
 	Text.TextColor3 = Color3.fromRGB(255, 50, 50)
 	Text.Font = Enum.Font.GothamBold
-	Text.TextSize = 14
-	Text.TextXAlignment = Enum.TextXAlignment.Left
-
-	local TweenIn = TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {
-		Position = UDim2.new(1, -290, 1, -10)
-	})
-	TweenIn:Play()
+	Text.TextSize = 13
+	TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Position = UDim2.new(1, -330, 1, -10)}):Play()
 	task.wait(3)
-	local TweenOut = TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-		Position = UDim2.new(1, 300, 1, -60)
-	})
-	TweenOut:Play()
-	TweenOut.Completed:Wait()
+	TweenService:Create(Frame, TweenInfo.new(0.3), {Position = UDim2.new(1, 340, 1, -60)}):Play()
+	task.wait(0.3)
 	ScreenGui:Destroy()
 end)
 
-local function SetupFling(char)
-	local Humanoid = char:WaitForChild("Humanoid")
+local function SetupFlingV2(char)
 	local HRP = char:WaitForChild("HumanoidRootPart")
+	local Humanoid = char:WaitForChild("Humanoid")
 	
-	-- BYPASS DE LOS 4 BLOQUEOS DEL ANTI-FLING
-	RunService.Heartbeat:Connect(function()
-		if not HRP or not HRP.Parent then return end
-		
-		-- Bloqueo 1: Te ancla si alguien va rápido cerca
-		if HRP.Anchored then
-			HRP.Anchored = false
-		end
-		
-		-- Bloqueo 2: CollisionGroupSetCollidable false entre players
-		-- Forzamos a que choquen poniéndolos en Default
-		for _, plr in pairs(Players:GetPlayers()) do
-			if plr ~= lp and plr.Character then
-				local theirHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-				if theirHRP then
-					-- Bloqueo 3: CanCollide = false
-					theirHRP.CanCollide = true
-					-- Bloqueo 4: CollisionGroup = "AntiflingPlayers"
-					pcall(function()
-						theirHRP.CollisionGroup = "Default"
-					end)
-				end
+	-- 1. MATA LOS LOOPS DEL ANTI-FLING DESPUÉS DE 11s
+	task.delay(11, function()
+		for _, v in pairs(getconnections(RunService.Heartbeat)) do
+			local s = tostring(v.Function)
+			if s:find("RotVelocity") or s:find("Velocity = Vector3.new(0,0,0)") or s:find("CanCollide = false") then
+				pcall(function() v:Disable() end)
 			end
 		end
 	end)
 	
-	-- FLING LOOP ORIGINAL
-	task.spawn(function()
-		local hrp, c, vel, movel = nil, nil, nil, 0.1
-		while true do
-			RunService.Heartbeat:Wait()
-			if hiddenfling then
-				while hiddenfling and not (c and c.Parent and hrp and hrp.Parent) do
-					RunService.Heartbeat:Wait()
-					c = lp.Character
-					hrp = c and c:FindFirstChild("HumanoidRootPart")
-				end
-
-				if hiddenfling then
-					vel = hrp.Velocity
-					hrp.Velocity = vel * flingPower + Vector3.new(0, flingPower, 0)
-					RunService.RenderStepped:Wait()
-					if c and c.Parent and hrp and hrp.Parent then
-						hrp.Velocity = vel
-					end
-					RunService.Stepped:Wait()
-					if c and c.Parent and hrp and hrp.Parent then
-						hrp.Velocity = vel + Vector3.new(0, movel, 0)
-						movel = movel * -1
+	-- 2. HITBOX INVISIBLE MASIVA SOLDADA A TI
+	local FlingPart = Instance.new("Part")
+	FlingPart.Name = "FlingHitbox"
+	FlingPart.Size = Vector3.new(10, 10, 10)
+	FlingPart.Transparency = 1
+	FlingPart.CanCollide = true
+	FlingPart.Massless = false
+	FlingPart.CustomPhysicalProperties = PhysicalProperties.new(9e9, 0, 0) -- masa absurda
+	FlingPart.CFrame = HRP.CFrame
+	FlingPart.Parent = char
+	
+	local Weld = Instance.new("WeldConstraint")
+	Weld.Part0 = HRP
+	Weld.Part1 = FlingPart
+	Weld.Parent = FlingPart
+	
+	-- 3. BODYVELOCITY HACIA ABAJO EN LA HITBOX, NO EN TU HRP
+	local BV = Instance.new("BodyVelocity")
+	BV.MaxForce = Vector3.new(0, 9e9, 0)
+	BV.Velocity = Vector3.new(0, -flingPower, 0)
+	BV.P = 1250
+	BV.Parent = FlingPart
+	
+	local BAV = Instance.new("BodyAngularVelocity")
+	BAV.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+	BAV.AngularVelocity = Vector3.new(0, 0, 0)
+	BAV.Parent = FlingPart
+	
+	-- 4. ANULA EL ANCLADO Y COLLISION GROUPS CADA FRAME
+	RunService.Heartbeat:Connect(function()
+		if HRP and HRP.Parent then
+			if HRP.Anchored then
+				HRP.Anchored = false
+			end
+			
+			-- Fuerza a todos los otros a chocar con tu hitbox
+			for _, plr in pairs(Players:GetPlayers()) do
+				if plr ~= lp and plr.Character then
+					local theirHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+					if theirHRP then
+						theirHRP.CanCollide = true
+						pcall(function()
+							theirHRP.CollisionGroup = "Default"
+						end)
 					end
 				end
 			end
@@ -131,7 +97,7 @@ local function SetupFling(char)
 	end)
 end
 
-lp.CharacterAdded:Connect(SetupFling)
+lp.CharacterAdded:Connect(SetupFlingV2)
 if lp.Character then
-	SetupFling(lp.Character)
+	SetupFlingV2(lp.Character)
 end
